@@ -30,6 +30,7 @@ python scripts/market_check.py     # connectivity + auth sanity check (never pla
 python dashboard/server.py         # http://localhost:8765
 python scripts/backfill_candles.py # 7 days of 1m candles + funding history -> data/market.sqlite
 python scripts/collect_ws.py       # live trades/quotes/book via authenticated WebSocket (Ctrl-C to stop)
+python -m backtest.run             # backtest the momentum strategy on stored candles
 pytest                             # unit tests
 ```
 
@@ -53,12 +54,40 @@ The dashboard shows live quotes, a 24h candlestick chart, the order book, the fu
 - `RISK_DAILY_LOSS_LIMIT` (default $100): when today's P&L (UTC day, marked to market, including fees and funding) reaches −limit, the **kill switch** trips.
 - While tripped, only orders that reduce the position are accepted, so you can always close. It clears at the next UTC day or via "Reset kill switch" (which re-trips if the loss is still over the limit). You can also trip it manually.
 
+## Backtesting
+
+```bash
+python -m backtest.run                                   # momentum, defaults
+python -m backtest.run --lookback 240 --threshold-bps 80 --min-hold 120
+python -m backtest.run --strategy hold                   # buy-and-hold baseline
+python -m backtest.run --days 3 --slippage-bps 2 --out data/bt   # + trades.csv / equity.csv
+```
+
+How fills work (no fantasy fills):
+
+- The strategy sees a 1-minute bar only after it closes and returns a target position.
+- The order executes at the **next** bar's open, at the quote actually observed: buys pay `ask_open`, sells get `bid_open`. Never the mid or the signal bar's close.
+- If that side of the book was empty, the order doesn't fill (reported as rejected).
+- Every fill pays the **taker** fee (your fee tier if keys are set), using the same fee and position code as paper trading.
+- Funding is settled on whatever position is held at each funding time; the same risk engine (notional cap, daily loss limit, kill switch) applies.
+- Candles don't include depth, so size isn't checked against the book. Keep sizes small, or add `--slippage-bps`.
+
+The report breaks net P&L into price P&L (with the spread you crossed shown separately), taker fees and funding, and compares against buy-and-hold.
+
+### Starter strategy: `strategies/momentum.py`
+
+Time-series momentum on the mid: go long (short) `size` contracts when the `lookback`-minute return is above (below) `threshold_bps`; hold at least `min_hold` minutes; go flat when the signal fades inside `exit_bps`. A round trip costs about 2 × 0.12% taker plus the spread, so thresholds well below ~30 bps lose by construction.
+
+On 7 days of demo data (Sep 16–23, 2026) it **loses money** at every setting tried (−$30 to −$178 on 10 contracts), because demo BTC mean-reverted on these horizons. It's a template for the plumbing, not a strategy to trade.
+
 ## Layout
 
 | Path | What |
 | --- | --- |
 | `kalshi_perps/` | Config, request signing (RSA-PSS, also Ed25519), REST client for `/margin/*`, position accounting, paper broker, SQLite store, WebSocket collector |
 | `risk/` | Risk engine: notional cap, daily loss limit, kill switch |
+| `backtest/` | Data loading, event-driven engine, CLI (`python -m backtest.run`) |
+| `strategies/` | Strategy interface, momentum starter, buy-and-hold baseline |
 | `scripts/` | `market_check.py`, `backfill_candles.py`, `collect_ws.py` |
 | `dashboard/` | Local dashboard server + static page |
 | `tests/` | pytest suite |
