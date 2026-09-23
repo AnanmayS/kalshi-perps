@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC Perps Desk</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23f7931a'/><text x='8' y='12.5' font-size='11' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'>B</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">₿</span>
+    <div>
+      <div class="title"><span id="ticker">—</span> <span class="muted">Perpetual</span></div>
+      <div class="subtitle muted" id="subtitle">Kalshi · 0.0001 BTC / contract · CF Benchmarks BRTI</div>
+    </div>
+  </div>
+  <div class="badges">
+    <span class="badge env" id="envBadge">—</span>
+    <span class="badge" id="modeBadge">Paper only</span>
+    <span class="badge status" id="statusBadge"><i class="dot"></i><span>Connecting</span></span>
+    <div class="seg" role="group" aria-label="Price units">
+      <button data-unit="btc" class="on">BTC $</button>
+      <button data-unit="contract">Contract $</button>
+    </div>
+  </div>
+</header>
+
+<section class="quotes" id="quotes">
+  <div class="q q-last"><label>Last</label><div class="v big" id="qLast">—</div><div class="sub" id="qChange">—</div></div>
+  <div class="q"><label>Bid</label><div class="v bid" id="qBid">—</div><div class="sub" id="qBidSz"></div></div>
+  <div class="q"><label>Ask</label><div class="v ask" id="qAsk">—</div><div class="sub" id="qAskSz"></div></div>
+  <div class="q"><label>Spread</label><div class="v" id="qSpread">—</div><div class="sub" id="qSpreadBps"></div></div>
+  <div class="q"><label>Mark</label><div class="v" id="qMark">—</div><div class="sub">funding mark</div></div>
+  <div class="q"><label>Index</label><div class="v" id="qIndex">—</div><div class="sub" id="qBasis"></div></div>
+  <div class="q"><label>24h volume</label><div class="v" id="qVol">—</div><div class="sub" id="qVolC"></div></div>
+  <div class="q"><label>Open interest</label><div class="v" id="qOI">—</div><div class="sub" id="qOIC"></div></div>
+</section>
+
+<main class="grid">
+  <section class="card chart-card">
+    <div class="card-head">
+      <h2>24h price</h2>
+      <div class="chart-meta muted" id="chartMeta"></div>
+      <div class="seg" role="group" aria-label="Candle interval">
+        <button data-iv="5">5m</button>
+        <button data-iv="15" class="on">15m</button>
+        <button data-iv="60">1h</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+  </section>
+
+  <section class="card book-card">
+    <div class="card-head"><h2>Order book</h2><span class="muted" id="bookMeta"></span></div>
+    <div class="book-cols muted"><span>Price</span><span>Size</span><span>Total</span></div>
+    <div class="book" id="asks"></div>
+    <div class="book-mid" id="bookMid">—</div>
+    <div class="book" id="bids"></div>
+  </section>
+
+  <section class="card funding-card">
+    <div class="card-head"><h2>Funding</h2><span class="muted">every 8h · 12a / 8a / 4p ET</span></div>
+    <div class="countdown" id="countdown">--:--:--</div>
+    <div class="muted small" id="nextFunding">next funding —</div>
+    <div class="bar"><div id="fundBar"></div></div>
+    <dl class="kv">
+      <dt>Est. rate (this period)</dt><dd id="fRate">—</dd>
+      <dt>Direction</dt><dd id="fDir">—</dd>
+      <dt>Per contract (est.)</dt><dd id="fPer">—</dd>
+      <dt>Annualized (×3×365)</dt><dd id="fAnn">—</dd>
+    </dl>
+    <p class="muted small">Estimate is a time-weighted premium average over the current window; it moves until the funding time. Capped ±2% per interval.</p>
+  </section>
+
+  <section class="card paper-card">
+    <div class="card-head"><h2>Paper trading</h2><span class="badge soft">Coming next</span></div>
+    <div class="paper-placeholder">
+      <p>Simulated orders against the live book, with taker fees, funding, and the risk engine (max notional, $100 daily loss limit, kill switch).</p>
+      <p class="muted small">Needs the paper engine and risk engine, which are the next build step. Nothing on this page can place orders.</p>
+    </div>
+  </section>
+
+  <section class="card account-card">
+    <div class="card-head"><h2>Demo account</h2><span class="muted small" id="acctMeta"></span></div>
+    <dl class="kv" id="acct">
+      <dt>Balance</dt><dd id="aBal">—</dd>
+      <dt>Position</dt><dd id="aPos">—</dd>
+      <dt>Maker fee</dt><dd id="aMaker">—</dd>
+      <dt>Taker fee</dt><dd id="aTaker">—</dd>
+    </dl>
+  </section>
+</main>
+
+<footer class="muted small">
+  <span id="updated">—</span> · read-only market view · data from Kalshi <span id="envFoot"></span> API
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
