@@ -107,7 +107,7 @@ h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
 
 .countdown { font: 600 34px/1.1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .bar { height: 4px; background: var(--panel-2); border-radius: 4px; margin: 10px 0 12px; overflow: hidden; }
-.bar > div { height: 100%; background: var(--accent); width: 0; transition: width 1s linear; }
+.bar > div { height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 1s linear; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 8px; }
 .kv dt { color: var(--muted); font-size: 13px; }
 .kv dd { margin: 0; text-align: right; font: 13px var(--mono); font-variant-numeric: tabular-nums; }

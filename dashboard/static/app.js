@@ -220,7 +220,7 @@ function tickCountdown() {
   const mnt = Math.floor((remaining % 3600000) / 60000);
   const sec = Math.floor((remaining % 60000) / 1000);
   $("countdown").textContent = [h, mnt, sec].map((x) => String(x).padStart(2, "0")).join(":");
-  $("fundBar").style.width = (((FUNDING_PERIOD_MS - Math.min(remaining, FUNDING_PERIOD_MS)) / FUNDING_PERIOD_MS) * 100).toFixed(2) + "%";
+  $("fundBar").style.transform = `scaleX(${((FUNDING_PERIOD_MS - Math.min(remaining, FUNDING_PERIOD_MS)) / FUNDING_PERIOD_MS).toFixed(4)})`;
 }
 
 /* ---------------- account ---------------- */
