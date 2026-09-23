@@ -3,6 +3,7 @@
     python -m backtest.run                                # momentum, all stored 1m candles
     python -m backtest.run --days 3 --size 5 --threshold-bps 60
     python -m backtest.run --strategy hold                # buy-and-hold baseline
+    python -m backtest.run --start 2026-08-16 --end 2026-08-23   # a specific UTC date range
     python -m backtest.run --out data/bt                  # also write trades/equity CSVs
 
 The taker fee rate comes from your Kalshi fee tier when API keys are configured,
@@ -15,6 +16,7 @@ import argparse
 import csv
 import sys
 import time
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -59,6 +61,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", choices=("momentum", "hold"), default="momentum")
     ap.add_argument("--days", type=float, default=None, help="only the most recent N days (default: all stored)")
+    ap.add_argument("--start", default=None, help="UTC start date YYYY-MM-DD (inclusive)")
+    ap.add_argument("--end", default=None, help="UTC end date YYYY-MM-DD (exclusive)")
     ap.add_argument("--size", default="10", help="contracts per position (default 10 = 0.001 BTC)")
     ap.add_argument("--lookback", type=int, default=60)
     ap.add_argument("--threshold-bps", type=float, default=40)
@@ -75,7 +79,12 @@ def main() -> int:
     settings = load_settings()
     store = MarketStore(args.db)
     start = int(time.time() - args.days * 86400) if args.days else None
-    bars = load_bars(store, settings.ticker, start_ts=start)
+    end = None
+    if args.start:
+        start = int(datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+    if args.end:
+        end = int(datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) - 1
+    bars = load_bars(store, settings.ticker, start_ts=start, end_ts=end)
     if not bars:
         print("No candles stored. Run: python scripts/backfill_candles.py")
         return 1
