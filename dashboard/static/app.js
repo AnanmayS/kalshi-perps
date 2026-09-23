@@ -472,6 +472,43 @@ function bindPaper() {
   });
 }
 
+/* ---------------- strategy runner ---------------- */
+
+async function refreshRunner() {
+  let r;
+  try { r = await getJSON("/api/runner"); } catch (e) { return; }
+  const badge = $("runBadge");
+  const label = badge.querySelector("span");
+  badge.classList.remove("ok", "bad");
+  $("runEmpty").hidden = !!r.exists;
+  $("runBody").hidden = !r.exists;
+  if (!r.exists) { label.textContent = "Not running"; $("runMeta").textContent = ""; return; }
+  if (r.running) { badge.classList.add("ok"); label.textContent = "Running"; }
+  else { badge.classList.add("bad"); label.textContent = "Stopped"; }
+  $("runMeta").textContent = r.running ? `heartbeat ${r.age_s}s ago · ${r.bars_seen} bars · ${r.errors} errors`
+    : `last heartbeat ${new Date(r.heartbeat).toLocaleString()}`;
+  const p = r.params || {};
+  $("runStrat").textContent = `${r.strategy} · ${p.lookback}m lookback · ±${p.threshold_bps} bps · size ${p.size}`;
+  const sig = r.signal_bps;
+  setText("runSignal", sig == null ? "warming up" : `${sig >= 0 ? "+" : ""}${sig.toFixed(1)} bps (entry at ±${p.threshold_bps})`,
+    sig == null ? "" : Math.abs(sig) >= p.threshold_bps ? (sig > 0 ? "up" : "down") : "");
+  $("runBar").textContent = r.last_bar ? new Date(r.last_bar).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " · mid " + fmtPx(r.last_mid) : "—";
+  const st = r.paper, pos = st.position, q = num(pos.qty);
+  $("runPos").textContent = q === 0 ? "Flat" : `${q > 0 ? "Long" : "Short"} ${fmtSize(Math.abs(q))} @ ${fmtPx(pos.avg_entry)}`;
+  setText("runUpnl", money(pos.unrealized_pnl, true), signCls(pos.unrealized_pnl));
+  setText("runReal", money(pos.realized_pnl, true), signCls(pos.realized_pnl));
+  const fp = num(pos.funding_paid);
+  $("runCosts").textContent = `$${num(pos.fees_paid).toFixed(4)} · ${fp > 0 ? "paid" : fp < 0 ? "recv" : ""} $${Math.abs(fp).toFixed(4)}`;
+  const eq = num(st.equity), start = num(st.starting_cash);
+  $("runEq").innerHTML = `${money(eq)} <span class="${signCls(eq - start)}">(${money(eq - start, true)})</span>`;
+  setText("runKill", st.risk.killed ? "ON: " + st.risk.kill_reason : `armed · today ${money(st.risk.daily_pnl, true)}`,
+    st.risk.killed ? "down" : "");
+  const log = $("runLog");
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 20;
+  log.textContent = (r.log || []).join("\n");
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
 /* ---------------- chart ---------------- */
 
 const chart = { canvas: null, ctx: null, bars: [], hover: null, layout: null };
@@ -730,6 +767,8 @@ async function main() {
   schedulePreview(0);
   setInterval(refreshSnapshot, 1000);
   setInterval(refreshPaper, 2000);
+  refreshRunner();
+  setInterval(refreshRunner, 3000);
   setInterval(() => schedulePreview(0), 3000);
   setInterval(refreshCandles, 30000);
   setInterval(refreshAccount, 10000);

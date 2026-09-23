@@ -31,6 +31,7 @@ python dashboard/server.py         # http://localhost:8765
 python scripts/backfill_candles.py # 7 days of 1m candles + funding history -> data/market.sqlite
 python scripts/collect_ws.py       # live trades/quotes/book via authenticated WebSocket (Ctrl-C to stop)
 python -m backtest.run             # backtest the momentum strategy on stored candles
+python scripts/paper_run.py        # run the strategy live on paper (Ctrl-C to stop)
 pytest                             # unit tests
 ```
 
@@ -80,6 +81,25 @@ Time-series momentum on the mid: go long (short) `size` contracts when the `look
 
 On 7 days of demo data (Sep 16–23, 2026) it **loses money** at every setting tried (−$30 to −$178 on 10 contracts), because demo BTC mean-reverted on these horizons. It's a template for the plumbing, not a strategy to trade.
 
+## Paper trading runner
+
+```bash
+python scripts/paper_run.py                                        # momentum, default params
+python scripts/paper_run.py --lookback 240 --threshold-bps 80 --min-hold 120 --size 5
+python scripts/paper_run.py --duration 3600 --flatten-on-exit      # 1 hour, close position at the end
+python scripts/paper_run.py --reset                                # fresh paper account
+caffeinate -i python scripts/paper_run.py                          # keep the Mac awake while it runs
+```
+
+- Each minute, a few seconds after Kalshi publishes the closed 1m candle, the runner builds the same bar the backtester uses and asks the strategy for a target position.
+- Target changes become paper **taker** orders against the live order book, through the same paper broker and risk engine as the dashboard. **Nothing is ever sent to Kalshi**, regardless of `KALSHI_LIVE_TRADING`.
+- On start it warms the strategy up on recent candles without trading. If it falls behind (Mac asleep, network down), missed bars update the strategy but never trade; only a bar that just closed can.
+- Kill switch: when the daily loss limit trips, the position is flattened and only reducing orders are allowed (the backtester does the same).
+- State lives in `data/runner/` (its own paper account, separate from the dashboard's manual ticket), so restarts keep the position and P&L. Funding due while stopped is settled on restart.
+- The dashboard's **Strategy runner** card shows its status, signal, position, P&L and log while it runs.
+
+It only runs while the computer is on and awake. For 24/7 paper trading, run it on a small always-on server.
+
 ## Layout
 
 | Path | What |
@@ -88,6 +108,7 @@ On 7 days of demo data (Sep 16–23, 2026) it **loses money** at every setting t
 | `risk/` | Risk engine: notional cap, daily loss limit, kill switch |
 | `backtest/` | Data loading, event-driven engine, CLI (`python -m backtest.run`) |
 | `strategies/` | Strategy interface, momentum starter, buy-and-hold baseline |
+| `runner/` | Paper-trading runner (live data, paper fills) |
 | `scripts/` | `market_check.py`, `backfill_candles.py`, `collect_ws.py` |
 | `dashboard/` | Local dashboard server + static page |
 | `tests/` | pytest suite |

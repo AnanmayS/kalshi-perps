@@ -32,6 +32,7 @@ from risk import RiskConfig  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 PAPER_STATE = ROOT / "data" / "paper_state.json"
+RUNNER_STATUS = ROOT / "data" / "runner" / "status.json"
 CONTRACT_BTC = 10_000  # 1 contract = 0.0001 BTC
 # Kalshi fills empty-book candle fields with sentinels (int64-max ask, 0 bid).
 SENTINEL_MAX = Decimal("1000000")
@@ -135,12 +136,19 @@ class Dashboard:
         except Exception:
             return
         with self.lock:
-            for ev in sorted(events, key=lambda e: e["funding_time"]):
-                t = parse_ts(ev["funding_time"]).timestamp()
-                if since < t <= now:
-                    self.broker.apply_funding(ev["funding_time"], D(ev["funding_rate"]), D(ev["mark_price"]))
-            self.broker.funding_checked_until = now
-            self.broker._save()
+            self.broker.settle_funding(events, now, parse_ts)
+
+    def runner_status(self) -> dict:
+        """Read-only view of scripts/paper_run.py (a separate process) via its status file."""
+        if not RUNNER_STATUS.is_file():
+            return {"exists": False, "running": False}
+        try:
+            st = json.loads(RUNNER_STATUS.read_text())
+        except (ValueError, OSError):
+            return {"exists": True, "running": False, "error": "status file unreadable"}
+        age = time.time() - float(st.get("heartbeat_ts") or 0)
+        st.update(exists=True, running=age < 15, age_s=round(age, 1))
+        return st
 
     def paper_state(self) -> dict:
         snap = self.snapshot()
@@ -248,7 +256,8 @@ class Dashboard:
 
 def make_handler(app: Dashboard):
     routes = {"/api/config": app.config, "/api/snapshot": app.snapshot,
-              "/api/candles": app.candles, "/api/account": app.account, "/api/paper/state": app.paper_state}
+              "/api/candles": app.candles, "/api/account": app.account, "/api/paper/state": app.paper_state,
+              "/api/runner": app.runner_status}
     post_routes = {"/api/paper/preview": app.paper_preview, "/api/paper/order": app.paper_order,
                    "/api/paper/close": app.paper_close, "/api/paper/kill": app.paper_kill,
                    "/api/paper/reset_kill": app.paper_reset_kill, "/api/paper/reset": app.paper_reset_account}

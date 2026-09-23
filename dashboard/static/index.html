@@ -161,6 +161,29 @@
     </dl>
   </section>
 
+  <section class="card runner-card">
+    <div class="card-head">
+      <h2>Strategy runner</h2>
+      <span class="badge status" id="runBadge"><i class="dot"></i><span>Not running</span></span>
+      <span class="muted small" id="runMeta"></span>
+    </div>
+    <div id="runEmpty" class="muted small">Start it with <code>python scripts/paper_run.py</code>. It trades its own paper account (separate from the manual ticket above) and never sends orders to Kalshi.</div>
+    <div class="runner-grid" id="runBody" hidden>
+      <dl class="kv">
+        <dt>Strategy</dt><dd id="runStrat">—</dd>
+        <dt>Signal</dt><dd id="runSignal">—</dd>
+        <dt>Last bar</dt><dd id="runBar">—</dd>
+        <dt>Position</dt><dd id="runPos">—</dd>
+        <dt>Unrealized</dt><dd id="runUpnl">—</dd>
+        <dt>Realized</dt><dd id="runReal">—</dd>
+        <dt>Fees · funding</dt><dd id="runCosts">—</dd>
+        <dt>Equity</dt><dd id="runEq">—</dd>
+        <dt>Kill switch</dt><dd id="runKill">—</dd>
+      </dl>
+      <pre class="runlog" id="runLog"></pre>
+    </div>
+  </section>
+
   <section class="card fills-card">
     <div class="card-head">
       <h2>Paper fills</h2>

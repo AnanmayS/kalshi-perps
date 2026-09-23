@@ -222,6 +222,20 @@ class PaperBroker:
         self._save()
         return pay
 
+    def settle_funding(self, events: list[dict], until_ts: float, parse_ts) -> list[Decimal]:
+        """Settle API funding events in (funding_checked_until, until_ts] and advance the checkpoint."""
+        since = self.funding_checked_until
+        paid = []
+        for ev in sorted(events, key=lambda e: e["funding_time"]):
+            t = parse_ts(ev["funding_time"]).timestamp()
+            if since < t <= until_ts:
+                r = self.apply_funding(ev["funding_time"], Decimal(str(ev["funding_rate"])), Decimal(ev["mark_price"]))
+                if r is not None:
+                    paid.append(r)
+        self.funding_checked_until = until_ts
+        self._save()
+        return paid
+
     # -- misc --------------------------------------------------------------------
 
     def _event(self, kind: str, now: datetime, **data) -> None:

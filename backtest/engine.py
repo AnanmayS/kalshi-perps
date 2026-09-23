@@ -15,7 +15,8 @@ Execution model (no fantasy fills):
 Funding: each funding event is settled on the position held at that instant
 (positive rate: longs pay shorts), using the event's mark price.
 Risk: the same RiskEngine as paper trading (max notional per trade, daily loss
-limit, kill switch). While killed, targets are clipped so exposure can only shrink.
+limit, kill switch). While killed, targets are clipped so exposure can only shrink,
+and by default the position is flattened at the next bar (same as the paper runner).
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ class BacktestConfig:
     taker_fee_rate: Decimal = DEFAULT_TAKER_FEE_RATE
     slippage_bps: Decimal = Decimal("0")      # extra cost on top of the observed spread, per fill
     risk: RiskConfig = field(default_factory=RiskConfig)
+    flatten_on_kill: bool = True              # close the position at the next bar when the kill switch trips
 
 
 @dataclass
@@ -251,6 +253,8 @@ def run_backtest(bars: Sequence[Bar], funding: Sequence[tuple[int, Decimal, Deci
         target = strategy.on_bar(bar, pos.qty)
         if target is not None and target != pos.qty:
             pending = Decimal(target)
+        if risk.killed and cfg.flatten_on_kill and pos.qty != 0:
+            pending = ZERO
 
     final_equity = curve[-1][1]
     price_pnl = pos.realized_pnl + pos.unrealized_pnl(last_mid)

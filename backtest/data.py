@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from kalshi_perps.store import MarketStore
+from kalshi_perps.store import MarketStore, _clean_ask, _clean_bid
 from strategies.base import Bar
 
 
 def _d(x):
     return None if x is None else Decimal(x)
+
+
+def bar_from_candle(c: dict) -> Bar:
+    """Build a Bar from a raw API candle, exactly as the backfill stores it (sentinels -> None)."""
+    p, b, a = c["price"], c["bid"], c["ask"]
+    return Bar(c["end_period_ts"], _d(p.get("open")), _d(p.get("high")), _d(p.get("low")), _d(p.get("close")),
+               _d(_clean_bid(b.get("open"))), _d(_clean_bid(b.get("close"))),
+               _d(_clean_ask(a.get("open"))), _d(_clean_ask(a.get("close"))), _d(c.get("volume")) or Decimal(0))
 
 
 def load_bars(store: MarketStore, ticker: str, start_ts: int | None = None, end_ts: int | None = None) -> list[Bar]:

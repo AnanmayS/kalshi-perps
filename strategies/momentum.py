@@ -34,6 +34,7 @@ class Momentum(Strategy):
         self.min_hold = min_hold
         self.mids: deque[Decimal] = deque(maxlen=lookback + 1)
         self.held = 0
+        self.last_signal_bps: float | None = None   # for status displays
 
     def params(self) -> dict:
         return {"lookback": self.lookback, "threshold_bps": float(self.threshold * 10_000),
@@ -48,6 +49,7 @@ class Momentum(Strategy):
         if len(self.mids) <= self.lookback:
             return None
         ret = self.mids[-1] / self.mids[0] - 1
+        self.last_signal_bps = float(ret * 10_000)
 
         if position != 0 and self.held < self.min_hold:
             return None
