@@ -31,13 +31,27 @@ python dashboard/server.py         # http://localhost:8765
 pytest                             # unit tests
 ```
 
-The dashboard shows live quotes, a 24h candlestick chart, the order book, the funding countdown and your demo account's fees and positions. It is read-only; the paper-trading panel is the next build step.
+The dashboard shows live quotes, a 24h candlestick chart, the order book, the funding countdown, your demo account's fees, and a paper-trading panel. It never sends orders to Kalshi.
+
+### Paper trading
+
+- Orders are immediate-or-cancel and fill against the **live order book**, level by level. Size the book can't fill is cancelled, never assumed filled.
+- Every paper fill crosses the spread, so it pays the **taker** fee (your rate from `/margin/fee_tiers`, else a 0.12% default) and is labelled TAKER in the UI.
+- Funding is settled on open paper positions at each funding time (positive rate: longs pay shorts).
+- Paper state is saved in `data/paper_state.json` (git-ignored). Starting balance: $10,000; max 5x leverage.
+
+### Risk engine (`risk/`)
+
+- `RISK_MAX_NOTIONAL_PER_TRADE` (default $500) caps each order's notional.
+- `RISK_DAILY_LOSS_LIMIT` (default $100): when today's P&L (UTC day, marked to market, including fees and funding) reaches −limit, the **kill switch** trips.
+- While tripped, only orders that reduce the position are accepted, so you can always close. It clears at the next UTC day or via "Reset kill switch" (which re-trips if the loss is still over the limit). You can also trip it manually.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `kalshi_perps/` | Config, request signing (RSA-PSS, also Ed25519), REST client for `/margin/*` |
+| `kalshi_perps/` | Config, request signing (RSA-PSS, also Ed25519), REST client for `/margin/*`, position accounting, paper broker |
+| `risk/` | Risk engine: notional cap, daily loss limit, kill switch |
 | `scripts/` | `market_check.py` (backfill script coming) |
 | `dashboard/` | Local dashboard server + static page |
 | `tests/` | pytest suite |

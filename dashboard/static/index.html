@@ -77,11 +77,77 @@
     <p class="muted small">Estimate is a time-weighted premium average over the current window; it moves until the funding time. Capped ±2% per interval.</p>
   </section>
 
-  <section class="card paper-card">
-    <div class="card-head"><h2>Paper trading</h2><span class="badge soft">Coming next</span></div>
-    <div class="paper-placeholder">
-      <p>Simulated orders against the live book, with taker fees, funding, and the risk engine (max notional, $100 daily loss limit, kill switch).</p>
-      <p class="muted small">Needs the paper engine and risk engine, which are the next build step. Nothing on this page can place orders.</p>
+  <section class="card ticket-card">
+    <div class="card-head"><h2>Paper order</h2><span class="badge soft">Simulated · never sent to Kalshi</span></div>
+    <div class="side-toggle" role="group" aria-label="Side">
+      <button type="button" data-side="buy" class="on buy">Buy / Long</button>
+      <button type="button" data-side="sell" class="sell">Sell / Short</button>
+    </div>
+    <label class="field">
+      <span>Size <em class="muted" id="sizeHint"></em></span>
+      <div class="input-row">
+        <input id="size" type="number" inputmode="decimal" min="1" step="1" value="1" aria-label="Contracts">
+        <span class="suffix">contracts</span>
+      </div>
+      <div class="chips" id="sizeChips">
+        <button type="button" data-q="1">1</button><button type="button" data-q="5">5</button>
+        <button type="button" data-q="10">10</button><button type="button" data-q="25">25</button>
+        <button type="button" data-q="50">50</button>
+      </div>
+    </label>
+    <div class="field">
+      <span>Order type</span>
+      <div class="seg wide" role="group" aria-label="Order type">
+        <button type="button" data-otype="market" class="on">Market</button>
+        <button type="button" data-otype="limit">Limit (IOC)</button>
+      </div>
+      <div class="input-row" id="limitRow" hidden>
+        <input id="limitPx" type="number" inputmode="decimal" step="any" aria-label="Limit price">
+        <span class="suffix" id="limitUnit">BTC $</span>
+      </div>
+    </div>
+    <dl class="kv preview" id="preview">
+      <dt>Est. avg fill</dt><dd id="pVwap">—</dd>
+      <dt>Notional</dt><dd id="pNotional">—</dd>
+      <dt>Fee <span class="tag taker" title="Paper orders cross the spread, so they pay the taker rate.">TAKER</span> <span class="muted" id="pFeeRate"></span></dt><dd id="pFee">—</dd>
+      <dt>Book levels used</dt><dd id="pLevels">—</dd>
+      <dt>Position after</dt><dd id="pAfter">—</dd>
+    </dl>
+    <div class="check" id="pCheck" role="status">—</div>
+    <button type="button" class="submit buy" id="submitBtn" disabled>Buy</button>
+    <div class="order-result small" id="orderResult" role="status" aria-live="polite" hidden></div>
+    <p class="muted small fine">Immediate-or-cancel against the live book: crosses the spread, pays the <strong>taker</strong> fee, and cancels any size the book can't fill. <span id="feeSource"></span></p>
+  </section>
+
+  <section class="card position-card">
+    <div class="card-head"><h2>Paper position</h2><button type="button" class="ghost" id="closeBtn" disabled>Close position</button></div>
+    <div class="pos-head">
+      <span class="pos-side" id="ppSide">Flat</span>
+      <span class="pos-upnl" id="ppUpnl">$0.00</span>
+    </div>
+    <dl class="kv">
+      <dt>Avg entry</dt><dd id="ppEntry">—</dd>
+      <dt>Mark</dt><dd id="ppMark">—</dd>
+      <dt>Notional</dt><dd id="ppNotional">—</dd>
+      <dt>Realized P&amp;L</dt><dd id="ppReal">—</dd>
+      <dt>Fees paid</dt><dd id="ppFees">—</dd>
+      <dt>Funding</dt><dd id="ppFunding">—</dd>
+      <dt>Equity</dt><dd id="ppEquity">—</dd>
+    </dl>
+    <div class="risk" id="riskBox">
+      <div class="risk-head">
+        <h3>Risk</h3>
+        <span class="kill-state" id="killState">Armed</span>
+      </div>
+      <div class="meter-label small"><span>Today's P&amp;L</span><span id="rDaily">—</span></div>
+      <div class="meter" aria-hidden="true"><div id="rMeter"></div></div>
+      <div class="meter-label small muted"><span id="rRemain">—</span><span id="rLimit">—</span></div>
+      <div class="small muted" id="rMaxNotional">—</div>
+      <div class="kill-reason small" id="killReason" hidden></div>
+      <div class="risk-actions">
+        <button type="button" class="danger" id="killBtn">Engage kill switch</button>
+        <button type="button" class="ghost" id="resetKillBtn" hidden>Reset kill switch</button>
+      </div>
     </div>
   </section>
 
@@ -94,10 +160,25 @@
       <dt>Taker fee</dt><dd id="aTaker">—</dd>
     </dl>
   </section>
+
+  <section class="card fills-card">
+    <div class="card-head">
+      <h2>Paper fills</h2>
+      <span class="muted small">all paper fills are taker fills</span>
+      <button type="button" class="ghost small-btn" id="resetAcctBtn">Reset paper account</button>
+    </div>
+    <div class="table-wrap">
+      <table class="fills">
+        <thead><tr><th>Time</th><th>Side</th><th class="r">Filled</th><th class="r">Avg price</th><th class="r">Notional</th><th>Liquidity</th><th class="r">Fee</th><th class="r">Realized</th><th class="r">Position</th></tr></thead>
+        <tbody id="fillsBody"><tr><td colspan="9" class="muted empty">No paper fills yet.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="events small" id="events"></div>
+  </section>
 </main>
 
 <footer class="muted small">
-  <span id="updated">—</span> · read-only market view · data from Kalshi <span id="envFoot"></span> API
+  <span id="updated">—</span> · paper trading only, no live orders · data from Kalshi <span id="envFoot"></span> API
 </footer>
 
 <script src="/app.js"></script>

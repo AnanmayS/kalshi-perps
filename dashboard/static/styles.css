@@ -111,20 +111,104 @@ h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 8px; }
 .kv dt { color: var(--muted); font-size: 13px; }
 .kv dd { margin: 0; text-align: right; font: 13px var(--mono); font-variant-numeric: tabular-nums; }
-.paper-placeholder {
-  border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; background: var(--panel-2);
+h3 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+button { font: inherit; }
+input {
+  font: 14px var(--mono); color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0;
 }
-.paper-placeholder p { margin: 0 0 8px; } .paper-placeholder p:last-child { margin: 0; }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* order ticket */
+.side-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.side-toggle button {
+  padding: 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--muted); font-weight: 600; cursor: pointer;
+}
+.side-toggle button.on.buy { background: var(--bid); border-color: var(--bid); color: #fff; }
+.side-toggle button.on.sell { background: var(--ask); border-color: var(--ask); color: #fff; }
+.field { display: block; margin-bottom: 12px; }
+.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.field em { font-style: normal; }
+.input-row { position: relative; margin-top: 6px; }
+.input-row input { padding-right: 84px; }
+.suffix { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
+.chips { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.chips button {
+  font: 12px var(--mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.chips button:hover { color: var(--text); border-color: var(--muted); }
+.seg.wide { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+.preview { padding: 10px 0 2px; border-top: 1px solid var(--line); }
+.tag {
+  font: 600 10px var(--sans); letter-spacing: 0.06em; padding: 1px 5px; border-radius: 4px; vertical-align: 1px;
+}
+.tag.taker { background: var(--warn-bg); color: var(--accent); }
+.check { font-size: 12.5px; padding: 7px 10px; border-radius: 8px; margin: 6px 0 10px; background: var(--panel-2); color: var(--muted); }
+.check.ok { background: var(--bid-bg); color: var(--bid); }
+.check.bad { background: var(--ask-bg); color: var(--ask); }
+.submit {
+  width: 100%; padding: 11px; border: 0; border-radius: 8px; color: #fff; font-weight: 650; cursor: pointer;
+}
+.submit.buy { background: var(--bid); } .submit.sell { background: var(--ask); }
+.submit:disabled { opacity: 0.4; cursor: not-allowed; }
+.fine { margin: 10px 0 0; }
+.order-result { margin-top: 8px; padding: 7px 10px; border-radius: 8px; font-family: var(--mono); background: var(--bid-bg); color: var(--bid); }
+.order-result.bad { background: var(--ask-bg); color: var(--ask); }
+
+/* position + risk */
+.ghost {
+  margin-left: auto; font-size: 12px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+.pos-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.pos-side { font: 600 18px var(--mono); }
+.pos-side.long { color: var(--bid); } .pos-side.short { color: var(--ask); }
+.pos-upnl { font: 600 18px var(--mono); }
+.risk { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+.risk-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.kill-state { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bid-bg); color: var(--bid); }
+.kill-state.tripped { background: var(--ask); color: #fff; }
+.meter-label { display: flex; justify-content: space-between; font-family: var(--mono); }
+.meter { height: 6px; background: var(--panel-2); border-radius: 6px; overflow: hidden; margin: 5px 0; }
+.meter > div { height: 100%; width: 100%; background: var(--bid); transform-origin: left; transform: scaleX(0); transition: transform 0.4s; }
+.meter.warn > div { background: var(--accent); } .meter.bad > div { background: var(--ask); }
+.kill-reason { margin-top: 8px; padding: 7px 10px; border-radius: 8px; background: var(--ask-bg); color: var(--ask); }
+.risk-actions { display: flex; gap: 8px; margin-top: 10px; }
+.risk-actions .ghost { margin-left: 0; }
+.danger {
+  font-size: 12px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--ask); background: transparent;
+  color: var(--ask); cursor: pointer; font-weight: 600;
+}
+.danger:hover { background: var(--ask-bg); }
+
+/* fills */
+.small-btn { margin-left: 0; }
+.fills-card .card-head .muted { margin-left: auto; }
+.table-wrap { overflow-x: auto; }
+table.fills { width: 100%; border-collapse: collapse; font: 12.5px var(--mono); font-variant-numeric: tabular-nums; }
+.fills th { text-align: left; font: 600 11px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.fills td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.fills .r { text-align: right; }
+.fills td.empty { text-align: center; padding: 18px; font-family: var(--sans); }
+.events { margin-top: 10px; display: grid; gap: 4px; }
+.events div { color: var(--muted); }
+.events .bad { color: var(--ask); }
 
 footer { padding: 4px 20px 20px; }
 
 /* wide: chart over three cards, order book down the right */
 @media (min-width: 1101px) {
   .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 320px;
-          grid-template-areas: "chart chart chart book" "funding paper account book"; }
-  .chart-card { grid-area: chart; } .book-card { grid-area: book; }
-  .grid > .funding-card { grid-area: funding; } .grid > .paper-card { grid-area: paper; }
-  .grid > .account-card { grid-area: account; }
+          grid-template-areas: "chart chart chart book" "ticket position funding account" "fills fills fills fills";
+          align-items: start; }
+  .chart-card { grid-area: chart; align-self: stretch; display: flex; flex-direction: column; }
+  .chart-card .chart-wrap { flex: 1; min-height: 380px; height: auto; }
+  .book-card { grid-area: book; align-self: stretch; }
+  .ticket-card { grid-area: ticket; } .position-card { grid-area: position; }
+  .funding-card { grid-area: funding; } .account-card { grid-area: account; } .fills-card { grid-area: fills; }
 }
 @media (max-width: 1100px) {
   .quotes { grid-template-columns: repeat(4, 1fr); }
@@ -132,6 +216,8 @@ footer { padding: 4px 20px 20px; }
 @media (max-width: 560px) {
   .topbar, .grid, footer { padding-left: 16px; padding-right: 16px; }
   .quotes { grid-template-columns: repeat(2, 1fr); }
-  .q-last { grid-column: span 2; }
+  .q-last, .quotes > .q:last-child { grid-column: span 2; }
+  .card-head { flex-wrap: wrap; }
+  .chart-card .chart-meta { display: none; }
   .chart-wrap { height: 280px; }
 }

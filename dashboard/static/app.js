@@ -15,6 +15,10 @@ const state = {
   candles: [],
   lastPrice: null,
   error: null,
+  side: "buy",
+  otype: "market",
+  paper: null,
+  previewSeq: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -64,6 +68,25 @@ async function getJSON(path) {
   const body = await r.json();
   if (!r.ok) throw new Error(body.error || "HTTP " + r.status);
   return body;
+}
+
+async function postJSON(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "HTTP " + r.status);
+  return data;
+}
+
+function money(x, signed = false) {
+  x = num(x);
+  if (x === null) return "—";
+  const s = "$" + Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (!signed) return (x < 0 ? "−" : "") + s;
+  return (x > 0 ? "+" : x < 0 ? "−" : "") + s;
+}
+function signCls(x) {
+  x = num(x);
+  return x > 0 ? "up" : x < 0 ? "down" : "";
 }
 
 /* ---------------- config / header ---------------- */
@@ -253,6 +276,200 @@ async function refreshAccount() {
   } catch (e) {
     $("acctMeta").textContent = "account error";
   }
+}
+
+/* ---------------- paper trading ---------------- */
+
+function orderBody() {
+  const count = $("size").value.trim();
+  const body = { side: state.side, count };
+  if (state.otype === "limit") {
+    const v = num($("limitPx").value);
+    // The limit input is in the display unit; the API wants dollars per contract.
+    body.limit_price = v === null ? "" : (state.unit === "btc" ? (v / CONTRACTS_PER_BTC).toFixed(4) : v.toFixed(4));
+  }
+  return body;
+}
+
+function setCheck(text, kind) {
+  const el = $("pCheck");
+  el.textContent = text;
+  el.className = "check" + (kind ? " " + kind : "");
+}
+
+let previewTimer = null;
+function schedulePreview(delay = 200) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(updatePreview, delay);
+}
+
+async function updatePreview() {
+  const size = num($("size").value);
+  $("sizeHint").textContent = size ? `≈ ${(size / CONTRACTS_PER_BTC).toFixed(4)} BTC` : "";
+  const btn = $("submitBtn");
+  btn.className = "submit " + state.side;
+  const verb = state.side === "buy" ? "Buy" : "Sell";
+  btn.textContent = `${verb} ${size || ""} · paper`;
+  const clear = () => ["pVwap", "pNotional", "pFee", "pLevels", "pAfter"].forEach((id) => ($(id).textContent = "—"));
+  if (!size || size <= 0) {
+    clear(); setCheck("Enter a size", ""); btn.disabled = true; return;
+  }
+  if (state.otype === "limit" && num($("limitPx").value) === null) {
+    clear(); setCheck("Enter a limit price", ""); btn.disabled = true; return;
+  }
+  const seq = ++state.previewSeq;
+  try {
+    const p = await postJSON("/api/paper/preview", orderBody());
+    if (seq !== state.previewSeq) return;
+    $("pVwap").textContent = p.vwap ? fmtPx(p.vwap) : "—";
+    $("pNotional").textContent = money(p.notional);
+    $("pFeeRate").textContent = pct(num(p.fee_rate), 2);
+    $("pFee").textContent = "$" + num(p.fee_cash).toFixed(4);
+    $("pLevels").textContent = p.levels.length
+      ? `${p.levels.length} level${p.levels.length > 1 ? "s" : ""}` + (num(p.unfilled) > 0 ? ` · ${fmtSize(p.unfilled)} would cancel` : "")
+      : "—";
+    const q = num(p.position_after.qty);
+    $("pAfter").textContent = q === 0 ? "Flat" : `${q > 0 ? "Long" : "Short"} ${fmtSize(Math.abs(q))} @ ${fmtPx(p.position_after.avg_entry)}`;
+    if (p.allowed) {
+      const partial = num(p.unfilled) > 0 ? ` (only ${fmtSize(p.filled)} of ${fmtSize(p.requested)} available)` : "";
+      setCheck((p.reduces_only ? "Risk check passed · reduces position" : "Risk check passed") + partial, partial ? "" : "ok");
+    } else {
+      setCheck("Blocked: " + p.reason, "bad");
+    }
+    btn.disabled = !p.allowed;
+  } catch (e) {
+    if (seq !== state.previewSeq) return;
+    clear(); setCheck(e.message, "bad"); btn.disabled = true;
+  }
+}
+
+function renderPaper() {
+  const st = state.paper;
+  if (!st) return;
+  const pos = st.position;
+  const q = num(pos.qty);
+  const side = $("ppSide");
+  side.textContent = q === 0 ? "Flat" : `${q > 0 ? "Long" : "Short"} ${fmtSize(Math.abs(q))}`;
+  side.className = "pos-side " + (q > 0 ? "long" : q < 0 ? "short" : "");
+  const up = $("ppUpnl");
+  up.textContent = money(pos.unrealized_pnl, true);
+  up.className = "pos-upnl " + signCls(pos.unrealized_pnl);
+  up.title = "Unrealized P&L at mark";
+  $("ppEntry").textContent = q === 0 ? "—" : fmtPx(pos.avg_entry);
+  $("ppMark").textContent = fmtPx(st.mark);
+  $("ppNotional").textContent = q === 0 ? "—" : money(pos.notional);
+  setText("ppReal", money(pos.realized_pnl, true), signCls(pos.realized_pnl));
+  $("ppFees").textContent = "$" + num(pos.fees_paid).toFixed(4);
+  const fp = num(pos.funding_paid);
+  setText("ppFunding", fp === 0 ? "$0.00" : `${fp > 0 ? "paid" : "received"} $${Math.abs(fp).toFixed(4)}`, fp > 0 ? "down" : fp < 0 ? "up" : "");
+  const eq = num(st.equity), start = num(st.starting_cash);
+  $("ppEquity").innerHTML = `${money(eq)} <span class="${signCls(eq - start)}">(${money(eq - start, true)})</span>`;
+  $("closeBtn").disabled = q === 0;
+
+  const r = st.risk;
+  const daily = num(r.daily_pnl), limit = num(r.daily_loss_limit);
+  setText("rDaily", money(daily, true), signCls(daily));
+  const used = Math.min(1, Math.max(0, -daily / limit));
+  const meter = $("rMeter");
+  meter.style.transform = `scaleX(${used.toFixed(4)})`;
+  meter.parentElement.className = "meter" + (used >= 1 ? " bad" : used >= 0.6 ? " warn" : "");
+  $("rRemain").textContent = `${money(Math.max(0, num(r.loss_remaining)))} left before kill`;
+  $("rLimit").textContent = `limit −${money(limit)}/day`;
+  $("rMaxNotional").textContent = `Max notional per trade ${money(r.max_notional_per_trade)} · max ${num(st.max_leverage)}× equity`;
+  const ks = $("killState");
+  ks.textContent = r.killed ? "Kill switch ON" : "Armed";
+  ks.classList.toggle("tripped", !!r.killed);
+  const reason = $("killReason");
+  reason.hidden = !r.killed;
+  reason.textContent = r.killed ? `Trading halted: ${r.kill_reason}. Only closing orders are allowed.` : "";
+  $("killBtn").hidden = !!r.killed;
+  $("resetKillBtn").hidden = !r.killed;
+
+  const rows = st.fills.map((f) => {
+    const t = new Date(f.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    const cancelled = num(f.cancelled) > 0 ? ` <span class="muted">(${fmtSize(f.cancelled)} cxl)</span>` : "";
+    const pa = num(f.position_after);
+    return `<tr><td>${t}</td><td class="${f.side === "buy" ? "up" : "down"}">${f.side === "buy" ? "Buy" : "Sell"}</td>` +
+      `<td class="r">${fmtSize(f.filled)}${cancelled}</td><td class="r">${fmtPx(f.vwap)}</td><td class="r">${money(f.notional)}</td>` +
+      `<td><span class="tag taker">TAKER</span> ${pct(num(f.fee_rate), 2)}</td><td class="r">$${num(f.fee).toFixed(4)}</td>` +
+      `<td class="r ${signCls(f.realized_pnl)}">${num(f.realized_pnl) === 0 ? "—" : money(f.realized_pnl, true)}</td>` +
+      `<td class="r">${pa === 0 ? "Flat" : (pa > 0 ? "+" : "−") + fmtSize(Math.abs(pa))}</td></tr>`;
+  });
+  $("fillsBody").innerHTML = rows.length ? rows.join("") : `<tr><td colspan="9" class="muted empty">No paper fills yet.</td></tr>`;
+
+  const ev = st.events.filter((e) => e.kind !== "rejected").slice(0, 5).map((e) => {
+    const t = new Date(e.ts).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    if (e.kind === "funding") {
+      const paid = num(e.paid);
+      return `<div>${t} · funding ${pct(num(e.rate), 4)} on ${fmtSize(Math.abs(num(e.qty)))} ${num(e.qty) > 0 ? "long" : "short"}: ${paid > 0 ? "paid" : "received"} $${Math.abs(paid).toFixed(4)}</div>`;
+    }
+    if (e.kind === "kill_switch") return `<div class="bad">${t} · kill switch tripped: ${e.reason}</div>`;
+    return "";
+  });
+  $("events").innerHTML = ev.join("");
+}
+
+async function refreshPaper() {
+  try {
+    state.paper = await getJSON("/api/paper/state");
+    renderPaper();
+  } catch (e) { /* snapshot status badge already reports API trouble */ }
+}
+
+function showResult(text, bad) {
+  const el = $("orderResult");
+  el.textContent = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) + " · " + text;
+  el.className = "order-result small" + (bad ? " bad" : "");
+  el.hidden = false;
+}
+
+async function paperAction(path, body, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await postJSON(path, body);
+    if (res.fill) {
+      const f = res.fill;
+      showResult(`${f.side === "buy" ? "Bought" : "Sold"} ${fmtSize(f.filled)} @ ${fmtPx(f.vwap)} · taker fee $${num(f.fee).toFixed(4)}` +
+        (num(f.cancelled) > 0 ? ` · ${fmtSize(f.cancelled)} cancelled (no liquidity)` : ""));
+    }
+    await refreshPaper();
+    setTimeout(() => schedulePreview(0), 1500);
+  } catch (e) {
+    showResult("Rejected: " + e.message, true);
+    await refreshPaper();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function bindPaper() {
+  document.querySelectorAll("[data-side]").forEach((b) => b.addEventListener("click", () => {
+    state.side = b.dataset.side;
+    document.querySelectorAll("[data-side]").forEach((x) => x.classList.toggle("on", x === b));
+    schedulePreview(0);
+  }));
+  document.querySelectorAll("[data-otype]").forEach((b) => b.addEventListener("click", () => {
+    state.otype = b.dataset.otype;
+    document.querySelectorAll("[data-otype]").forEach((x) => x.classList.toggle("on", x === b));
+    $("limitRow").hidden = state.otype !== "limit";
+    if (state.otype === "limit" && !$("limitPx").value && state.snap) {
+      const top = state.side === "buy" ? state.snap.book.asks[0] : state.snap.book.bids[0];
+      if (top) $("limitPx").value = state.unit === "btc" ? Math.round(toUnit(top[0])) : num(top[0]).toFixed(4);
+    }
+    schedulePreview(0);
+  }));
+  document.querySelectorAll("[data-q]").forEach((b) => b.addEventListener("click", () => {
+    $("size").value = b.dataset.q; schedulePreview(0);
+  }));
+  $("size").addEventListener("input", () => schedulePreview());
+  $("limitPx").addEventListener("input", () => schedulePreview());
+  $("submitBtn").addEventListener("click", (e) => paperAction("/api/paper/order", orderBody(), e.currentTarget));
+  $("closeBtn").addEventListener("click", (e) => paperAction("/api/paper/close", {}, e.currentTarget));
+  $("killBtn").addEventListener("click", () => paperAction("/api/paper/kill", {}));
+  $("resetKillBtn").addEventListener("click", () => paperAction("/api/paper/reset_kill", {}));
+  $("resetAcctBtn").addEventListener("click", () => {
+    if (confirm("Reset the paper account? This clears the paper position, fills, and P&L.")) paperAction("/api/paper/reset", {});
+  });
 }
 
 /* ---------------- chart ---------------- */
@@ -473,9 +690,15 @@ async function refreshSnapshot() {
 function bindControls() {
   document.querySelectorAll("[data-unit]").forEach((b) =>
     b.addEventListener("click", () => {
+      const prevUnit = state.unit;
       state.unit = b.dataset.unit;
       document.querySelectorAll("[data-unit]").forEach((x) => x.classList.toggle("on", x === b));
-      renderQuotes(); renderBook(); renderFundingStatic(); drawChart(); refreshAccount();
+      const lp = num($("limitPx").value);
+      if (lp !== null && prevUnit !== state.unit) {
+        $("limitPx").value = state.unit === "btc" ? Math.round(lp * CONTRACTS_PER_BTC) : (lp / CONTRACTS_PER_BTC).toFixed(4);
+      }
+      $("limitUnit").textContent = state.unit === "btc" ? "BTC $" : "per contract";
+      renderQuotes(); renderBook(); renderFundingStatic(); drawChart(); refreshAccount(); renderPaper(); schedulePreview(0);
     }));
   document.querySelectorAll("[data-iv]").forEach((b) =>
     b.addEventListener("click", () => {
@@ -493,15 +716,21 @@ async function main() {
   chart.canvas = $("chart");
   chart.ctx = chart.canvas.getContext("2d");
   bindControls();
+  bindPaper();
   try {
     await loadConfig();
+    $("feeSource").textContent = `Taker rate ${pct(num(state.cfg.taker_fee_rate), 2)} from ${state.cfg.fee_source}.`;
   } catch (e) {
     state.error = e.message;
     renderStatus();
   }
   await Promise.all([refreshSnapshot(), refreshCandles()]);
   refreshAccount();
+  refreshPaper();
+  schedulePreview(0);
   setInterval(refreshSnapshot, 1000);
+  setInterval(refreshPaper, 2000);
+  setInterval(() => schedulePreview(0), 3000);
   setInterval(refreshCandles, 30000);
   setInterval(refreshAccount, 10000);
   setInterval(() => { tickCountdown(); renderStatus(); }, 250);
