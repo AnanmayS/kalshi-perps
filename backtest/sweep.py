@@ -70,3 +70,22 @@ def fmt(r: dict) -> str:
     p = ", ".join(f"{k}={v}" for k, v in r["params"].items() if k != "size")
     return (f"{r['name']:8} {p:62} net {r['net']:+8.2f}  price {r['price']:+8.2f}  fees {-r['fees']:+7.2f}  "
             f"funding {r['funding_recv']:+7.2f}  fills {r['fills']:4}  dd {r['dd']:8.2f}{'  KILL' if r['killed'] else ''}")
+
+
+def walk_forward(configs, folds: list[tuple[str, str | None]], first_train_start: str, workers: int = 8,
+                 min_trades: int = 0) -> list[dict]:
+    """Walk-forward test of a *selection procedure*.
+
+    For each test fold, every config is scored on ALL data before the fold
+    (expanding window from first_train_start); the best one by net P&L is then
+    run on the fold. Only the fold results count, so the final total is fully
+    out-of-sample: nothing in a fold influenced the choice made for it.
+    """
+    out = []
+    for start, end in folds:
+        train = run_jobs(configs, first_train_start, start, workers)
+        train = [r for r in train if r["fills"] >= min_trades] or train
+        best = max(train, key=lambda r: r["net"])
+        test = run_jobs([(best["name"], best["params"])], start, end, workers)[0]
+        out.append({"fold": f"{start}..{end or 'now'}", "chosen": best, "test": test})
+    return out

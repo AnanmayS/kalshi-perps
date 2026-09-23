@@ -151,3 +151,18 @@ def test_carry_shorts_when_funding_positive_and_collects_it():
     funding = [(30, D("0.005"), D("8.5")), (200, D("0.005"), D("8.5"))]
     res = run_backtest(flat_bars(5), funding, FundingCarry(threshold_bps=20, window=1, size=D(10)), CFG)
     assert res.trades[0].side == "sell" and res.funding < 0   # negative = received
+
+
+def test_carry_hysteresis_and_rally_guard():
+    from strategies import FundingCarry
+    c = FundingCarry(threshold_bps=20, window=1, size=D(10), exit_bps=5)
+    c.on_funding(0, D("0.003"))
+    b = bar(60, "8.49", "8.51")
+    assert c.on_bar(b, D(0)) == D(-10)
+    c.on_funding(1, D("0.001"))                      # 10 bps: below entry, above exit
+    assert c.on_bar(b, D(-10)) == D(-10) and c.on_bar(b, D(0)) == D(0)
+    g = FundingCarry(threshold_bps=20, window=1, size=D(10), trend_minutes=2, trend_bps=50)
+    g.on_funding(0, D("0.003"))
+    for p in ("8.00", "8.00", "8.10"):               # +1.25% rally over 2 minutes
+        out = g.on_bar(bar(60, str(D(p) - D("0.01")), str(D(p) + D("0.01"))), D(-10))
+    assert out == D(0)                                # stand aside instead of staying short
