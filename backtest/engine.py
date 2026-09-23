@@ -180,6 +180,7 @@ def run_backtest(bars: Sequence[Bar], funding: Sequence[tuple[int, Decimal, Deci
         while f_idx < len(funding) and funding[f_idx][0] <= t:
             f_ts, rate, mark = funding[f_idx]
             f_idx += 1
+            strategy.on_funding(f_ts, rate)  # strictly after the event
             if f_ts < bars[0].ts - BAR_SECONDS or pos.qty == 0:
                 continue
             m = mark if mark is not None else fallback_mark

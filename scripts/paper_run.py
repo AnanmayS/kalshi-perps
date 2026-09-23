@@ -1,5 +1,6 @@
 """Run a strategy against live Kalshi data with paper fills.
 
+    python scripts/paper_run.py --strategy carry                  # funding carry (best backtest)
     python scripts/paper_run.py                                   # momentum, default params
     python scripts/paper_run.py --lookback 240 --threshold-bps 80 --min-hold 120 --size 5
     python scripts/paper_run.py --duration 600                    # stop after 10 minutes
@@ -26,14 +27,17 @@ from kalshi_perps.accounting import DEFAULT_TAKER_FEE_RATE  # noqa: E402
 from kalshi_perps.paper import PaperBroker  # noqa: E402
 from risk import RiskConfig  # noqa: E402
 from runner.paper import PaperRunner  # noqa: E402
-from strategies import Momentum  # noqa: E402
+from strategies import FundingCarry, MeanReversion, Momentum  # noqa: E402
 
 RUNNER_DIR = ROOT / "data" / "runner"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--strategy", choices=("momentum", "carry", "meanrev"), default="momentum")
     ap.add_argument("--size", default="10")
+    ap.add_argument("--carry-threshold-bps", type=float, default=20, help="carry: avg funding rate to act on")
+    ap.add_argument("--carry-window", type=int, default=3, help="carry: funding events to average")
     ap.add_argument("--lookback", type=int, default=60)
     ap.add_argument("--threshold-bps", type=float, default=40)
     ap.add_argument("--exit-bps", type=float, default=5)
@@ -41,6 +45,8 @@ def main() -> int:
     ap.add_argument("--duration", type=float, default=None, help="seconds to run (default: until Ctrl-C)")
     ap.add_argument("--starting-cash", default="10000")
     ap.add_argument("--reset", action="store_true", help="discard the saved runner paper account first")
+    ap.add_argument("--max-slippage-bps", type=float, default=25,
+                    help="never fill further than this from the mark; wait and retry instead (default 25)")
     ap.add_argument("--no-flatten-on-kill", action="store_true")
     ap.add_argument("--flatten-on-exit", action="store_true", help="close the paper position when stopping")
     args = ap.parse_args()
@@ -62,11 +68,17 @@ def main() -> int:
     broker = PaperBroker.open(state_path, RiskConfig(settings.max_notional_per_trade, settings.daily_loss_limit),
                               starting_cash=Decimal(args.starting_cash), taker_fee_rate=rate)
     broker.taker_fee_rate = rate
-    strategy = Momentum(args.lookback, args.threshold_bps, args.exit_bps, Decimal(args.size), args.min_hold)
+    if args.strategy == "carry":
+        strategy = FundingCarry(args.carry_threshold_bps, args.carry_window, Decimal(args.size))
+    elif args.strategy == "meanrev":
+        strategy = MeanReversion(size=Decimal(args.size))
+    else:
+        strategy = Momentum(args.lookback, args.threshold_bps, args.exit_bps, Decimal(args.size), args.min_hold)
     runner = PaperRunner(client, broker, strategy, ticker=settings.ticker,
                          status_path=RUNNER_DIR / "status.json",
                          warmup_minutes=max(360, args.lookback + 30),
                          flatten_on_kill=not args.no_flatten_on_kill,
+                         max_slippage_bps=args.max_slippage_bps,
                          log=lambda m: print(m, flush=True))
 
     runner.log(f"PAPER runner | env={settings.env} ticker={settings.ticker} strategy={strategy.name} "

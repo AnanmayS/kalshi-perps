@@ -169,3 +169,52 @@ def test_after_sleep_missed_bars_update_strategy_but_do_not_trade():
     assert T0 + 60 in strat.seen and T0 + 120 in strat.seen   # strategy state kept current
     assert [f["position_after"] for f in r.broker.fills] == [D(5)]  # only the fresh bar traded
     assert r.stale_bars == 58                     # the bar closed 64s before wake is still fresh (< 90s)
+
+
+def test_carry_strategy_gets_funding_in_warmup_and_live():
+    from strategies import FundingCarry
+    r, client, clock, _ = make({})
+    iso = lambda t: datetime.fromtimestamp(t, timezone.utc).isoformat()
+    client.funding = [{"funding_time": iso(T0 - 3600 * k), "funding_rate": 0.005, "mark_price": "8.50"} for k in (1, 9, 17)]
+    carry = FundingCarry(threshold_bps=20, window=3, size=D(10))
+    r.strategy = carry
+    r.warmup()
+    assert len(carry.rates) == 3                     # warm from history, no trade yet
+    assert r.broker.fills == []
+    client.candles[T0 + 60] = candle(T0 + 60, "8.49", "8.51")
+    clock.t = T0 + 64
+    r.step()
+    assert r.broker.position.qty == -10              # positive funding -> short to receive it
+    client.funding.append({"funding_time": iso(T0 + 100), "funding_rate": -0.02, "mark_price": "8.50"})
+    clock.t = T0 + 64 + 61
+    r.step()
+    assert carry.rates[-1] == D("-0.02")             # live event delivered after it happened
+
+
+def test_slippage_guard_waits_for_book_to_refill():
+    r, client, clock, strat = make({T0 + 60: -10})
+    r.warmup()
+    # Hollow book right after the minute: 1 contract near the mark, the rest 2% lower.
+    client.book = Orderbook(bids=[(D("8.4900"), D("1")), (D("8.33"), D("100"))], asks=[(D("8.51"), D("100"))])
+    client.candles[T0 + 60] = candle(T0 + 60, "8.49", "8.51")
+    clock.t = T0 + 64
+    r.step()
+    assert r.broker.position.qty == -1 and r.pending["target"] == D(-10)     # took only the good part
+    assert all(D(f["vwap"]) >= D("8.4787") for f in r.broker.fills)          # never beyond 25 bps of 8.50
+    client.book = Orderbook(bids=[(D("8.49"), D("100"))], asks=[(D("8.51"), D("100"))])
+    clock.t = T0 + 70
+    r.step()
+    assert r.broker.position.qty == -10 and r.pending is None
+
+
+def test_slippage_guard_gives_up_after_retry_window():
+    r, client, clock, strat = make({T0 + 60: 10})
+    r.warmup()
+    client.book = Orderbook(bids=[(D("8.49"), D("100"))], asks=[(D("8.70"), D("100"))])   # ask 2% away
+    client.candles[T0 + 60] = candle(T0 + 60, "8.49", "8.51")
+    clock.t = T0 + 64
+    r.step()
+    assert r.broker.fills == [] and r.pending is not None
+    clock.t = T0 + 64 + 301
+    r.step()
+    assert r.pending is None and r.broker.position.qty == 0

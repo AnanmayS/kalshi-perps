@@ -28,7 +28,7 @@ from kalshi_perps import KalshiPerpsClient, load_settings  # noqa: E402
 from kalshi_perps.accounting import DEFAULT_TAKER_FEE_RATE  # noqa: E402
 from kalshi_perps.store import DEFAULT_DB, MarketStore  # noqa: E402
 from risk import RiskConfig  # noqa: E402
-from strategies import BuyAndHold, Momentum  # noqa: E402
+from strategies import BuyAndHold, FundingCarry, MeanReversion, Momentum  # noqa: E402
 
 
 def fee_rate(settings, override: str | None) -> tuple[Decimal, str]:
@@ -59,7 +59,9 @@ def write_csvs(res, out: Path) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--strategy", choices=("momentum", "hold"), default="momentum")
+    ap.add_argument("--strategy", choices=("momentum", "hold", "carry", "meanrev"), default="momentum")
+    ap.add_argument("--carry-threshold-bps", type=float, default=20)
+    ap.add_argument("--carry-window", type=int, default=3)
     ap.add_argument("--days", type=float, default=None, help="only the most recent N days (default: all stored)")
     ap.add_argument("--start", default=None, help="UTC start date YYYY-MM-DD (inclusive)")
     ap.add_argument("--end", default=None, help="UTC end date YYYY-MM-DD (exclusive)")
@@ -97,6 +99,10 @@ def main() -> int:
     size = Decimal(args.size)
     if args.strategy == "momentum":
         strat = Momentum(args.lookback, args.threshold_bps, args.exit_bps, size, args.min_hold)
+    elif args.strategy == "carry":
+        strat = FundingCarry(args.carry_threshold_bps, args.carry_window, size)
+    elif args.strategy == "meanrev":
+        strat = MeanReversion(size=size)
     else:
         strat = BuyAndHold(size)
 

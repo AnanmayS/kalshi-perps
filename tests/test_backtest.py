@@ -126,3 +126,28 @@ def test_momentum_goes_long_on_uptrend_and_respects_threshold():
     mids = ["8.50", "8.50", "8.50", "8.52", "8.60"]   # +0.24% then +1.2% over 3 bars
     out = [m.on_bar(bar(60 * i, D(p) - D("0.01"), D(p) + D("0.01")), D(0)) for i, p in enumerate(mids)]
     assert out[3] is None and out[4] == D(2)
+
+
+def test_strategy_sees_funding_only_after_it_happens():
+    seen = []
+
+    class Spy(Strategy):
+        name = "spy"
+
+        def on_funding(self, ts, rate):
+            seen.append(("f", ts))
+
+        def on_bar(self, b, position):
+            seen.append(("b", b.ts))
+            return None
+
+    run_backtest(flat_bars(3), [(150, D("0.001"), D("8.5"))], Spy(), CFG)
+    assert seen.index(("f", 150)) > seen.index(("b", 120))    # not visible at the 120 bar
+    assert seen.index(("f", 150)) < seen.index(("b", 180))    # visible by the 180 bar
+
+
+def test_carry_shorts_when_funding_positive_and_collects_it():
+    from strategies import FundingCarry
+    funding = [(30, D("0.005"), D("8.5")), (200, D("0.005"), D("8.5"))]
+    res = run_backtest(flat_bars(5), funding, FundingCarry(threshold_bps=20, window=1, size=D(10)), CFG)
+    assert res.trades[0].side == "sell" and res.funding < 0   # negative = received

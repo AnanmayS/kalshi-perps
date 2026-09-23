@@ -38,5 +38,8 @@ class Strategy:
     def on_bar(self, bar: Bar, position: Decimal) -> Decimal | None:
         raise NotImplementedError
 
+    def on_funding(self, ts: int, rate: Decimal) -> None:
+        """Called after each funding event has happened (never before), whether or not in a position."""
+
     def params(self) -> dict:
         return {}

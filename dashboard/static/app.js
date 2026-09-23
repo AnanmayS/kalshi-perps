@@ -488,10 +488,17 @@ async function refreshRunner() {
   $("runMeta").textContent = r.running ? `heartbeat ${r.age_s}s ago · ${r.bars_seen} bars · ${r.errors} errors`
     : `last heartbeat ${new Date(r.heartbeat).toLocaleString()}`;
   const p = r.params || {};
-  $("runStrat").textContent = `${r.strategy} · ${p.lookback}m lookback · ±${p.threshold_bps} bps · size ${p.size}`;
+  const desc = {
+    momentum: () => `momentum · ${p.lookback}m lookback · ±${p.threshold_bps} bps · size ${p.size}`,
+    carry: () => `funding carry · avg of last ${p.window} rates · ±${p.threshold_bps} bps · size ${p.size}`,
+    meanrev: () => `mean reversion · ${p.lookback}m · z ${p.entry_z} · size ${p.size}`,
+  }[r.strategy];
+  $("runStrat").textContent = desc ? desc() : r.strategy;
   const sig = r.signal_bps;
-  setText("runSignal", sig == null ? "warming up" : `${sig >= 0 ? "+" : ""}${sig.toFixed(1)} bps (entry at ±${p.threshold_bps})`,
-    sig == null ? "" : Math.abs(sig) >= p.threshold_bps ? (sig > 0 ? "up" : "down") : "");
+  const thr = p.threshold_bps ?? p.min_edge_bps;
+  const sigLabel = r.strategy === "carry" ? "avg funding " : "";
+  setText("runSignal", sig == null ? "warming up" : `${sigLabel}${sig >= 0 ? "+" : ""}${sig.toFixed(1)} bps` + (thr != null ? ` (acts at ±${thr})` : ""),
+    sig == null || thr == null ? "" : Math.abs(sig) >= thr ? (sig > 0 ? "up" : "down") : "");
   $("runBar").textContent = r.last_bar ? new Date(r.last_bar).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " · mid " + fmtPx(r.last_mid) : "—";
   const st = r.paper, pos = st.position, q = num(pos.qty);
   $("runPos").textContent = q === 0 ? "Flat" : `${q > 0 ? "Long" : "Short"} ${fmtSize(Math.abs(q))} @ ${fmtPx(pos.avg_entry)}`;

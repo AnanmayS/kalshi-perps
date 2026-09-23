@@ -48,7 +48,8 @@ class PaperRunner:
                  status_path: Path | None = None, clock: Callable[[], float] = time.time,
                  log: Callable[[str], None] = print, warmup_minutes: int = 360,
                  bar_grace: float = 3.0, bar_giveup: float = 45.0, mark_every: float = 5.0,
-                 funding_every: float = 60.0, flatten_on_kill: bool = True, stale_after: float = 90.0):
+                 funding_every: float = 60.0, flatten_on_kill: bool = True, stale_after: float = 90.0,
+                 max_slippage_bps: float = 25.0, retry_every: float = 5.0, retry_for: float = 300.0):
         self.client = client
         self.broker = broker
         self.strategy = strategy
@@ -63,6 +64,13 @@ class PaperRunner:
         self.funding_every = funding_every
         self.flatten_on_kill = flatten_on_kill
         self.stale_after = stale_after  # bars older than this (seconds past close) never trade
+        # Slippage guard: never fill more than this far from the mark. If the book is too
+        # thin (the demo book sometimes empties for a moment right after the minute),
+        # keep the unfilled remainder pending and retry instead of taking a bad price.
+        self.max_slippage = Decimal(str(max_slippage_bps)) / 10_000
+        self.retry_every = retry_every
+        self.retry_for = retry_for
+        self.pending: dict | None = None
 
         self.started_at = clock()
         self.last_bar_ts: int | None = None
@@ -75,6 +83,7 @@ class PaperRunner:
         self.bars_seen = 0
         self.missing_bars = 0
         self.stale_bars = 0
+        self.funding_seen_until: float = clock()
         self.recent: deque[str] = deque(maxlen=40)
 
     # ---- helpers ------------------------------------------------------------------
@@ -95,8 +104,20 @@ class PaperRunner:
         end = int(now) // BAR_SECONDS * BAR_SECONDS
         bars = [bar_from_candle(c) for c in self._candles(end - self.warmup_minutes * BAR_SECONDS, end)]
         bars = [b for b in bars if b.ts <= now - self.bar_grace]
+        # Funding events that already happened, oldest first, so e.g. a carry strategy knows recent rates.
+        fstart = end - max(self.warmup_minutes * BAR_SECONDS, 3 * 86400)
+        events = sorted(self.client.funding_rates_history(ticker=self.ticker, start_ts=fstart, end_ts=int(now)),
+                        key=lambda e: e["funding_time"])
+        feed = [(parse_ts(e["funding_time"]).timestamp(), Decimal(str(e["funding_rate"]))) for e in events]
+        fi = 0
         for b in bars:
+            while fi < len(feed) and feed[fi][0] <= b.ts:
+                self.strategy.on_funding(int(feed[fi][0]), feed[fi][1])
+                fi += 1
             self.strategy.on_bar(b, self.broker.position.qty)  # signal ignored on purpose
+        for t, r in feed[fi:]:
+            self.strategy.on_funding(int(t), r)
+        self.funding_seen_until = now
         if bars:
             self.last_bar_ts, self.last_bar = bars[-1].ts, bars[-1]
         else:
@@ -115,6 +136,8 @@ class PaperRunner:
                 self._settle_funding(now)
             if self.last_bar_ts is not None and now >= self.last_bar_ts + BAR_SECONDS + self.bar_grace:
                 self._process_new_bars(now)
+            if self.pending and now - self.pending["last_try"] >= self.retry_every:
+                self._retry_pending(now)
         except Exception as e:  # keep running through network hiccups
             self.errors += 1
             self.log(f"error: {type(e).__name__}: {e}")
@@ -145,6 +168,12 @@ class PaperRunner:
     def _settle_funding(self, now: float) -> None:
         since = int(self.broker.funding_checked_until)
         events = self.client.funding_rates_history(ticker=self.ticker, start_ts=since - 60, end_ts=int(now))
+        for ev in sorted(events, key=lambda e: e["funding_time"]):
+            t = parse_ts(ev["funding_time"]).timestamp()
+            if self.funding_seen_until < t <= now:
+                self.strategy.on_funding(int(t), Decimal(str(ev["funding_rate"])))
+                self.log(f"funding event {ev['funding_time']}: rate {Decimal(str(ev['funding_rate'])) * 100:.4f}%")
+        self.funding_seen_until = now
         for paid in self.broker.settle_funding(events, int(now), parse_ts):
             if paid:
                 self.log(f"funding settled: {'paid' if paid > 0 else 'received'} ${abs(paid):.4f}")
@@ -184,27 +213,63 @@ class PaperRunner:
             return
         self.last_target = Decimal(target)
         self.log(f"bar {_iso(bar.ts)[11:16]} mid {bar.mid}{sig_txt} -> target {target} (from {qty})")
+        self.pending = None  # a fresh signal supersedes any unfinished order
         self._execute(Decimal(target), "strategy")
 
-    def _execute(self, target: Decimal, why: str) -> None:
+    def _retry_pending(self, now: float) -> None:
+        p = self.pending
+        if p["expires"] is not None and now > p["expires"]:
+            self.log(f"{p['why']}: gave up reaching target {p['target']} within {self.max_slippage * 10_000:.0f} bps "
+                     f"of the mark; position stays {self.broker.position.qty}")
+            self.pending = None
+            return
+        self._update_mark(now)
+        self._execute(p["target"], p["why"] + " (retry)", retry=True)
+
+    def _execute(self, target: Decimal, why: str, retry: bool = False) -> None:
+        now = self.clock()
+        base_why = why.replace(" (retry)", "")
         qty = self.broker.position.qty
         if self.broker.risk.killed:
             # Same clip as the backtester: exposure may only shrink toward zero.
             target = ZERO if sign(target) != sign(qty) else sign(qty) * min(abs(target), abs(qty))
         delta = target - qty
         if delta == 0:
+            self.pending = None
             return
         side = "buy" if delta > 0 else "sell"
         book = self.client.orderbook(self.ticker)
+        ref = self.mark or (self.last_bar.mid if self.last_bar else None) or book.mid
+        limit = None
+        if ref is not None:
+            limit = ref * (1 + self.max_slippage) if side == "buy" else ref * (1 - self.max_slippage)
+            limit = limit.quantize(Decimal("0.0001"))
         reduces = qty != 0 and sign(delta) == -sign(qty) and abs(delta) <= abs(qty)
+
+        def keep_pending(reason: str) -> None:
+            if not retry:
+                self.log(f"{why}: {reason}; retrying every {self.retry_every:.0f}s")
+            expires = None if base_why.startswith("kill") else now + self.retry_for
+            prev = self.pending
+            self.pending = {"target": target, "why": base_why, "last_try": now,
+                            "expires": prev["expires"] if (retry and prev) else expires}
+
         try:
-            f = self.broker.place(side, abs(delta), book.bids, book.asks, self.mark, reduce_only=reduces)
+            f = self.broker.place(side, abs(delta), book.bids, book.asks, self.mark,
+                                  limit_price=limit, reduce_only=reduces)
         except OrderRejected as e:
-            self.log(f"{why}: {side} {abs(delta)} REJECTED: {e}")
+            if "no liquidity" in str(e):
+                keep_pending(f"no {side} liquidity within {self.max_slippage * 10_000:.0f} bps of mark {ref} "
+                             f"(best {'ask' if side == 'buy' else 'bid'} {book.best_ask if side == 'buy' else book.best_bid})")
+            else:
+                self.log(f"{why}: {side} {abs(delta)} REJECTED: {e}")
+                self.pending = None
             return
-        extra = f", {f['cancelled']} cancelled (book too thin)" if f["cancelled"] else ""
-        self.log(f"{why}: {side} {f['filled']} @ {f['vwap']:.4f} TAKER fee ${f['fee']}{extra}; "
-                 f"position now {f['position_after']}")
+        self.log(f"{why}: {side} {f['filled']} @ {f['vwap']:.4f} TAKER fee ${f['fee']}; position now {f['position_after']}")
+        if f["cancelled"]:
+            keep_pending(f"{f['cancelled']} left unfilled within {self.max_slippage * 10_000:.0f} bps of the mark")
+        else:
+            self.pending = None
 
     # ---- status -------------------------------------------------------------------
 
@@ -227,6 +292,7 @@ class PaperRunner:
             "stale_bars": self.stale_bars,
             "errors": self.errors,
             "flatten_on_kill": self.flatten_on_kill,
+            "pending": self.pending,
             "paper": st,
             "log": list(self.recent)[-20:],
         }

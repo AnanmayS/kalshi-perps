@@ -31,7 +31,7 @@ python dashboard/server.py         # http://localhost:8765
 python scripts/backfill_candles.py # 7 days of 1m candles + funding history -> data/market.sqlite
 python scripts/collect_ws.py       # live trades/quotes/book via authenticated WebSocket (Ctrl-C to stop)
 python -m backtest.run             # backtest the momentum strategy on stored candles
-python scripts/paper_run.py        # run the strategy live on paper (Ctrl-C to stop)
+python scripts/paper_run.py --strategy carry   # run a strategy live on paper (Ctrl-C to stop)
 pytest                             # unit tests
 ```
 
@@ -100,6 +100,23 @@ caffeinate -i python scripts/paper_run.py                          # keep the Ma
 
 It only runs while the computer is on and awake. For 24/7 paper trading, run it on a small always-on server.
 
+### Strategy research (Aug 14 – Sep 23, 2026 demo data)
+
+Tuned on Aug 14 – Sep 9 only, then scored once on the held-out Sep 9 – 23 (`backtest/sweep.py`). All runs: 10 contracts, 0.12% taker, fills at the next minute's observed bid/ask, funding included.
+
+| Strategy | Tuning period | Held-out period | Notes |
+| --- | --- | --- | --- |
+| **Funding carry** (`--strategy carry`, avg of last 3 rates, ±20 bps) | +$8.57 (14/15 variants positive) | **+$16.49** (9/9 neighbours positive) | Short while funding is strongly positive; earns the funding |
+| Mean reversion (z-score) | best −$0.48, 0/228 variants positive | — | Edge before costs ≈ taker fees; not viable taker-only |
+| Momentum (slow) | −$199.86 | −$111.82 | Loses every week |
+| Buy & hold | +$8.44 | −$16.78 | |
+
+Funding carry over all 40 days: **+$25.18** (funding +$29.89, price −$4.24, 5 fills, max drawdown −$12.97).
+
+Caveats: demo funding is extreme (~0.66% per 8h, ~700%/yr); production funding is usually far smaller, so this edge may not exist there. Carry holds a short, so a strong BTC rally can outweigh the funding. 40 days is a short sample.
+
+The runner also has a slippage guard (`--max-slippage-bps`, default 25): it never fills further than that from the mark and retries for up to 5 minutes instead. The demo book sometimes empties for a moment right after the minute.
+
 ## Layout
 
 | Path | What |
@@ -107,7 +124,7 @@ It only runs while the computer is on and awake. For 24/7 paper trading, run it 
 | `kalshi_perps/` | Config, request signing (RSA-PSS, also Ed25519), REST client for `/margin/*`, position accounting, paper broker, SQLite store, WebSocket collector |
 | `risk/` | Risk engine: notional cap, daily loss limit, kill switch |
 | `backtest/` | Data loading, event-driven engine, CLI (`python -m backtest.run`) |
-| `strategies/` | Strategy interface, momentum starter, buy-and-hold baseline |
+| `strategies/` | Strategy interface; momentum, mean reversion, funding carry, buy-and-hold baseline |
 | `runner/` | Paper-trading runner (live data, paper fills) |
 | `scripts/` | `market_check.py`, `backfill_candles.py`, `collect_ws.py` |
 | `dashboard/` | Local dashboard server + static page |
