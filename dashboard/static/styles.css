@@ -187,7 +187,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 /* strategy runner */
 .runner-card .card-head .badge { margin-left: 0; }
 .runner-card #runMeta { margin-left: auto; }
-.runner-grid { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 16px; }
+.runner-grid { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 16px; }
 .runlog {
   margin: 0; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
   font: 11.5px/1.6 var(--mono); color: var(--muted); max-height: 230px; overflow: auto; white-space: pre-wrap;
