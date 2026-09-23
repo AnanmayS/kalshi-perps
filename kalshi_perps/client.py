@@ -10,6 +10,7 @@ Everything money-like is returned as Decimal.
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -86,6 +87,7 @@ class KalshiPerpsClient:
         self.base_url = settings.rest_base_url
         self.session = session or requests.Session()
         self.timeout = timeout
+        self.retry_backoff = 0.5
         self.signer: KalshiSigner | None = None
         if settings.has_credentials:
             self.signer = KalshiSigner.from_file(settings.api_key_id, settings.private_key_path)
@@ -100,7 +102,15 @@ class KalshiPerpsClient:
                 raise AuthRequired(f"{path} needs KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH")
             headers.update(self.signer.headers(method, url))
         params = {k: v for k, v in (params or {}).items() if v is not None}
-        resp = self.session.request(method, url, params=params, json=json, headers=headers, timeout=self.timeout)
+        # GETs are safe to retry on rate limiting / transient server errors; writes never are.
+        attempts = 4 if method == "GET" else 1
+        for attempt in range(attempts):
+            if auth and attempt:
+                headers.update(self.signer.headers(method, url))  # fresh timestamp
+            resp = self.session.request(method, url, params=params, json=json, headers=headers, timeout=self.timeout)
+            if resp.status_code not in (429, 500, 502, 503, 504) or attempt == attempts - 1:
+                break
+            time.sleep(self.retry_backoff * 2 ** attempt)
         if resp.status_code >= 400:
             try:
                 body = resp.json()

@@ -28,8 +28,15 @@ cp .env.example .env
 ```bash
 python scripts/market_check.py     # connectivity + auth sanity check (never places orders)
 python dashboard/server.py         # http://localhost:8765
+python scripts/backfill_candles.py # 7 days of 1m candles + funding history -> data/market.sqlite
+python scripts/collect_ws.py       # live trades/quotes/book via authenticated WebSocket (Ctrl-C to stop)
 pytest                             # unit tests
 ```
+
+### Market data (`data/market.sqlite`, git-ignored)
+
+- `backfill_candles.py [--days N] [--interval 1|60|1440] [--resume]`: public REST candles, chunked under Kalshi's 5,000-candle cap, upserted so re-runs are safe. Each 1m candle keeps trade OHLC **and** bid/ask OHLC (observed spreads for the backtester); empty-book sentinels are stored as NULL. Also stores funding history.
+- `collect_ws.py [--duration S]`: signs the WebSocket handshake with your key, subscribes to `orderbook_delta`, `ticker` and `trade`, and maintains a local book. Records every trade, every top-of-book change, ticker updates (mark, index, funding) and a top-25 book snapshot every 5s. If a sequence number is skipped the book is marked invalid and a fresh snapshot is requested; it reconnects with backoff on drops.
 
 The dashboard shows live quotes, a 24h candlestick chart, the order book, the funding countdown, your demo account's fees, and a paper-trading panel. It never sends orders to Kalshi.
 
@@ -50,9 +57,9 @@ The dashboard shows live quotes, a 24h candlestick chart, the order book, the fu
 
 | Path | What |
 | --- | --- |
-| `kalshi_perps/` | Config, request signing (RSA-PSS, also Ed25519), REST client for `/margin/*`, position accounting, paper broker |
+| `kalshi_perps/` | Config, request signing (RSA-PSS, also Ed25519), REST client for `/margin/*`, position accounting, paper broker, SQLite store, WebSocket collector |
 | `risk/` | Risk engine: notional cap, daily loss limit, kill switch |
-| `scripts/` | `market_check.py` (backfill script coming) |
+| `scripts/` | `market_check.py`, `backfill_candles.py`, `collect_ws.py` |
 | `dashboard/` | Local dashboard server + static page |
 | `tests/` | pytest suite |
 
@@ -63,3 +70,5 @@ The dashboard shows live quotes, a 24h candlestick chart, the order book, the fu
 - Candles for minutes with an empty book carry sentinel values (ask high = int64 max, bid low = 0); ignore them when computing spreads.
 - Positive funding rate: longs pay shorts. Clamped to ±2% per 8h interval.
 - `/margin/balance` can return 403 on demo; the client reports it as unavailable instead of raising.
+- Candlestick requests are capped at 5,000 candles; Kalshi omits some minutes entirely (~6% on demo).
+- GET requests retry on 429/5xx with backoff; order requests are never retried.

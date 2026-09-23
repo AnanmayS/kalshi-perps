@@ -88,10 +88,22 @@ def test_balance_without_credentials_does_not_crash():
 
 
 def test_balance_other_errors_still_raise(keyfile):
-    c, _ = make({("GET", "/margin/balance"): (500, {"error": "boom"})},
-                KALSHI_API_KEY_ID="kid", KALSHI_PRIVATE_KEY_PATH=str(keyfile))
+    c, sess = make({("GET", "/margin/balance"): (500, {"error": "boom"})},
+                   KALSHI_API_KEY_ID="kid", KALSHI_PRIVATE_KEY_PATH=str(keyfile))
+    c.retry_backoff = 0
     with pytest.raises(KalshiAPIError):
         c.balance()
+    assert len(sess.calls) == 4  # GET retried on 5xx
+
+
+def test_orders_are_never_retried(keyfile):
+    c, sess = make({("POST", "/margin/orders"): (503, {"error": "busy"})},
+                   KALSHI_ENV="prod", KALSHI_LIVE_TRADING="true",
+                   KALSHI_API_KEY_ID="kid", KALSHI_PRIVATE_KEY_PATH=str(keyfile))
+    c.retry_backoff = 0
+    with pytest.raises(KalshiAPIError):
+        c.create_order("bid", "1", "8.40")
+    assert len(sess.calls) == 1
 
 
 @pytest.mark.parametrize("env", [
