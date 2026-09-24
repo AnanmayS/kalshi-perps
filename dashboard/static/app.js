@@ -914,9 +914,16 @@ function bindControls() {
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", drawChart);
 }
 
-// Poll only while the tab is visible (saves bandwidth, especially on the public view).
+// Poll at full speed while the tab is visible; in a hidden tab slow down to every 30s
+// instead of stopping (some embedded views and mobile browsers report "hidden" while on screen).
 function every(ms, fn) {
-  setInterval(() => { if (!document.hidden) fn(); }, ms);
+  let last = 0;
+  setInterval(() => {
+    const now = Date.now();
+    if (document.hidden && now - last < Math.max(ms, 30000)) return;
+    last = now;
+    fn();
+  }, ms);
 }
 
 async function main() {
