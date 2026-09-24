@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from kalshi_perps import KalshiAPIError, KalshiPerpsClient, load_settings  # noqa: E402
-from kalshi_perps.accounting import DEFAULT_TAKER_FEE_RATE  # noqa: E402
+from kalshi_perps.accounting import DEFAULT_TAKER_FEE_RATE, Position  # noqa: E402
 from kalshi_perps.client import D, parse_ts  # noqa: E402
 from kalshi_perps.paper import OrderRejected, PaperBroker  # noqa: E402
 from risk import RiskConfig  # noqa: E402
@@ -33,6 +33,7 @@ from risk import RiskConfig  # noqa: E402
 STATIC = Path(__file__).resolve().parent / "static"
 PAPER_STATE = ROOT / "data" / "paper_state.json"
 RUNNER_STATUS = ROOT / "data" / "runner" / "status.json"
+RUNNER_STATE = ROOT / "data" / "runner" / "paper_state.json"
 CONTRACT_BTC = 10_000  # 1 contract = 0.0001 BTC
 # Kalshi fills empty-book candle fields with sentinels (int64-max ask, 0 bid).
 SENTINEL_MAX = Decimal("1000000")
@@ -162,6 +163,56 @@ class Dashboard:
         st.update(exists=True, running=age < 15, age_s=round(age, 1))
         return st
 
+    def runner_history(self) -> dict:
+        """Equity curve of the strategy runner's paper account, rebuilt from its saved fills and
+        funding payments, marked at each candle's bid/ask mid. Nothing is stored by the runner,
+        so this also covers the time before the chart existed."""
+        def build():
+            if not RUNNER_STATE.is_file():
+                return {"points": []}
+            st = json.loads(RUNNER_STATE.read_text())
+            fills = sorted(st.get("fills", []), key=lambda f: f["ts"])
+            if not fills:
+                return {"points": [], "starting_cash": st.get("starting_cash")}
+            funding = sorted((parse_ts(e["funding_time"]).timestamp(), D(e["paid"]))
+                             for e in st.get("events", []) if e.get("kind") == "funding")
+            start = int(parse_ts(fills[0]["ts"]).timestamp()) - 1800
+            now = int(time.time())
+            span_min = (now - start) // 60
+            interval = 1 if span_min <= 4500 else 60 if span_min <= 60 * 4500 else 1440
+            candles = self.client.candlesticks(start, now, period_interval=interval)
+            points = []
+            cash = D(st["starting_cash"])
+            pos = Position()
+            fees = funding_recv = Decimal(0)
+            fi = ei = 0
+            last_mid = None
+            for c in candles:
+                t = c["end_period_ts"]
+                while fi < len(fills) and parse_ts(fills[fi]["ts"]).timestamp() <= t:
+                    f = fills[fi]
+                    qty = D(f["filled"]) * (1 if f["side"] == "buy" else -1)
+                    r = pos.apply_fill(qty, D(f["vwap"]))
+                    cash += r.realized_pnl - D(f["fee"])
+                    fees += D(f["fee"])
+                    fi += 1
+                while ei < len(funding) and funding[ei][0] <= t:
+                    cash -= funding[ei][1]
+                    funding_recv -= funding[ei][1]
+                    ei += 1
+                # Mark at the bid/ask mid only when the quote is sane: the thin demo book sometimes
+                # empties for a moment at the minute boundary, which would draw fake spikes.
+                bid, ask = c["bid"].get("close"), c["ask"].get("close")
+                if bid and ask and 0 < D(bid) < D(ask) < 1000 and (D(ask) - D(bid)) / D(bid) < Decimal("0.005"):
+                    last_mid = (D(bid) + D(ask)) / 2
+                if last_mid is None:
+                    continue
+                mid = last_mid
+                equity = cash + pos.unrealized_pnl(mid)
+                points.append([t, round(float(equity), 2), round(float(funding_recv), 2), round(float(fees), 2)])
+            return {"starting_cash": float(D(st["starting_cash"])), "interval_min": interval, "points": points}
+        return self.cache.get("runner_history", 60.0, build)
+
     def paper_state(self) -> dict:
         snap = self.snapshot()
         with self.lock:
@@ -269,7 +320,7 @@ class Dashboard:
 def make_handler(app: Dashboard):
     routes = {"/api/config": app.config, "/api/snapshot": app.snapshot,
               "/api/candles": app.candles, "/api/account": app.account, "/api/paper/state": app.paper_state,
-              "/api/runner": app.runner_status}
+              "/api/runner": app.runner_status, "/api/runner/history": app.runner_history}
     post_routes = {"/api/paper/preview": app.paper_preview, "/api/paper/order": app.paper_order,
                    "/api/paper/close": app.paper_close, "/api/paper/kill": app.paper_kill,
                    "/api/paper/reset_kill": app.paper_reset_kill, "/api/paper/reset": app.paper_reset_account}

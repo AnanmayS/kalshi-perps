@@ -194,6 +194,19 @@
 
   <section class="card history-card" id="historyCard" hidden>
     <div class="card-head"><h2>Strategy runner: trade history</h2><span class="muted small" id="histMeta"></span></div>
+    <div class="pnl-charts">
+      <div>
+        <div class="pnl-head"><h3>Return since start</h3><span class="muted small" id="pnlRetNow"></span></div>
+        <div class="pnl-wrap"><canvas id="pnlRet" role="img" aria-label="Strategy runner account return in percent over time"></canvas><div class="tip" id="pnlRetTip" hidden></div></div>
+      </div>
+      <div>
+        <div class="pnl-head"><h3>Where the P&amp;L comes from</h3>
+          <span class="legend small"><i class="sw" style="background:var(--bid)"></i>Funding received <i class="sw dash" style="border-color:var(--accent)"></i>Price move + fees <i class="sw" style="background:var(--text)"></i>Net</span>
+        </div>
+        <div class="pnl-wrap"><canvas id="pnlParts" role="img" aria-label="Net P&L in dollars split into funding received and price move plus fees"></canvas><div class="tip" id="pnlPartsTip" hidden></div></div>
+      </div>
+    </div>
+    <p class="muted small fine" id="pnlNote">Rebuilt from the runner's fills and funding payments, marked at each minute's bid/ask mid.</p>
     <div class="history-grid">
       <div>
         <h3>Trades</h3>

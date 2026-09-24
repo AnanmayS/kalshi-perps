@@ -557,6 +557,122 @@ function renderHistory(st) {
     `${fund.length} funding payment${fund.length === 1 ? "" : "s"} · net funding ${recv >= 0 ? "+" : "−"}$${Math.abs(recv).toFixed(2)}`;
 }
 
+/* ---------------- runner P&L charts ---------------- */
+
+const pnl = { data: null, hover: { pnlRet: null, pnlParts: null } };
+
+function lineChart(id, xs, series, fmtY, tipFmt) {
+  const cv = $(id);
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H || !xs.length) return;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const col = { grid: cssVar("--grid"), muted: cssVar("--muted"), line: cssVar("--line") };
+  const padL = 58, padR = 10, padT = 8, padB = 22;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  let lo = 0, hi = 0;
+  for (const s of series) for (const v of s.ys) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const pad = (hi - lo) * 0.08 || 1; lo -= pad; hi += pad;
+  const x0 = xs[0], x1 = xs[xs.length - 1] || x0 + 1;
+  const X = (t) => padL + ((t - x0) / (x1 - x0 || 1)) * pw;
+  const Y = (v) => padT + (1 - (v - lo) / (hi - lo)) * ph;
+  ctx.font = "11px " + cssVar("--mono");
+  ctx.textBaseline = "middle"; ctx.textAlign = "right";
+  const step = niceStep(hi - lo, 4);
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+    const yy = Math.round(Y(v)) + 0.5;
+    ctx.strokeStyle = Math.abs(v) < step / 1e6 ? col.line : col.grid;
+    ctx.lineWidth = Math.abs(v) < step / 1e6 ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.fillText(fmtY(v), padL - 6, yy);
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  const ticks = Math.min(5, Math.max(2, Math.floor(pw / 120)));
+  for (let i = 0; i <= ticks; i++) {
+    const t = x0 + ((x1 - x0) * i) / ticks;
+    const d = new Date(t * 1000);
+    const label = (x1 - x0) > 2 * 86400 ? d.toLocaleDateString([], { month: "short", day: "numeric" })
+      : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    ctx.fillStyle = col.muted; ctx.fillText(label, Math.min(Math.max(X(t), padL + 20), W - padR - 20), H - 5);
+  }
+  for (const s of series) {
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.width || 2; ctx.lineJoin = "round"; ctx.setLineDash(s.dash || []);
+    ctx.beginPath();
+    // Break the line across data gaps (Kalshi publishes no candle for some stretches).
+    xs.forEach((t, i) => {
+      const gap = i && t - xs[i - 1] > (pnl.data.interval_min || 1) * 60 * 15;
+      (i && !gap) ? ctx.lineTo(X(t), Y(s.ys[i])) : ctx.moveTo(X(t), Y(s.ys[i]));
+    });
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const hi_ = pnl.hover[id];
+  if (hi_ !== null && hi_ !== undefined && xs[hi_] !== undefined) {
+    const xx = Math.round(X(xs[hi_])) + 0.5;
+    ctx.strokeStyle = col.muted; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(xx, padT); ctx.lineTo(xx, padT + ph); ctx.stroke(); ctx.setLineDash([]);
+    for (const s of series) {
+      ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(xx, Y(s.ys[hi_]), 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    const tip = $(id + "Tip");
+    tip.textContent = tipFmt(hi_);
+    tip.hidden = false;
+    const tw = tip.offsetWidth;
+    tip.style.left = (xx + 12 + tw > W ? xx - tw - 12 : xx + 12) + "px";
+    tip.style.top = "6px";
+  }
+  cv._layout = { X, xs, padL, pw };
+}
+
+function drawPnl() {
+  const d = pnl.data;
+  if (!d || !d.points || !d.points.length) {
+    $("pnlNote").textContent = "P&L charts appear after the runner's first trade.";
+    return;
+  }
+  const start = d.starting_cash;
+  const xs = d.points.map((p) => p[0]);
+  const net = d.points.map((p) => p[1] - start);
+  const fund = d.points.map((p) => p[2]);
+  const priceFees = net.map((n, i) => n - fund[i]);
+  const ret = net.map((n) => (n / start) * 100);
+  const last = ret[ret.length - 1];
+  setText("pnlRetNow", `${last >= 0 ? "+" : "−"}${Math.abs(last).toFixed(2)}% · ${money(net[net.length - 1], true)}`, signCls(last));
+  const when = (i) => new Date(xs[i] * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const pctFmt = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(Math.abs(v) < 10 ? 2 : 1)}%`;
+  lineChart("pnlRet", xs, [{ ys: ret, color: cssVar("--accent"), width: 2.2 }], pctFmt,
+    (i) => `${when(i)}\nreturn ${pctFmt(ret[i])}  (${money(net[i], true)})`);
+  const usd = (v) => (v < 0 ? "−" : "") + "$" + Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  lineChart("pnlParts", xs, [
+    { ys: fund, color: cssVar("--bid"), width: 2 },
+    { ys: priceFees, color: cssVar("--accent"), width: 2, dash: [5, 4] },
+    { ys: net, color: cssVar("--text"), width: 2.2 },
+  ], usd, (i) => `${when(i)}\nfunding    ${money(fund[i], true)}\nprice+fees ${money(priceFees[i], true)}\nnet        ${money(net[i], true)}`);
+  $("pnlNote").textContent = `Rebuilt from the runner's fills and funding payments, marked at each ${d.interval_min === 1 ? "minute's" : d.interval_min === 60 ? "hour's" : "day's"} bid/ask mid. Funding steps up at each payment; price + fees moves with BTC (the account is short).`;
+}
+
+async function refreshPnl() {
+  try { pnl.data = await getJSON("/api/runner/history"); drawPnl(); } catch (e) { /* card still shows tables */ }
+}
+
+function bindPnl() {
+  for (const id of ["pnlRet", "pnlParts"]) {
+    const cv = $(id);
+    cv.addEventListener("mousemove", (ev) => {
+      const L = cv._layout; if (!L) return;
+      const mx = ev.clientX - cv.getBoundingClientRect().left;
+      let best = 0, bd = Infinity;
+      L.xs.forEach((t, i) => { const dd = Math.abs(L.X(t) - mx); if (dd < bd) { bd = dd; best = i; } });
+      pnl.hover[id] = best; drawPnl();
+    });
+    cv.addEventListener("mouseleave", () => { pnl.hover[id] = null; $(id + "Tip").hidden = true; drawPnl(); });
+    new ResizeObserver(drawPnl).observe(cv);
+  }
+}
+
 /* ---------------- chart ---------------- */
 
 const chart = { canvas: null, ctx: null, bars: [], hover: null, layout: null };
@@ -819,6 +935,9 @@ async function main() {
   await Promise.all([refreshSnapshot(), refreshCandles()]);
   refreshAccount();
   refreshRunner();
+  bindPnl();
+  refreshPnl();
+  every(60000, refreshPnl);
   if (pub) {
     // Read-only view: no manual paper account, and gentler polling.
     every(10000, refreshSnapshot);
