@@ -107,6 +107,17 @@ Google's free tier includes one `e2-micro` VM (1 GB RAM, shared CPU) per month i
 
 The external IP is ephemeral by default: it can change if you stop and start the VM (just use the new one). Google's pricing for external IPv4 addresses has changed over time, so check the billing page after the first few days and set a budget alert; a small charge there is the most likely surprise.
 
+## Public read-only dashboard (optional)
+
+To view the dashboard from any browser without an SSH tunnel, publish a **read-only** copy over HTTPS:
+
+1. Allow inbound HTTP and HTTPS: Google Cloud → VM → **Edit → Firewalls → Allow HTTP traffic + Allow HTTPS traffic → Save** (Oracle: add ingress rules for TCP 80 and 443 to the subnet's security list).
+2. On the server: `bash ~/kalshi-perps/deploy/enable_public_dashboard.sh`
+
+It prints the URL, e.g. `https://34-75-82-205.sslip.io` (sslip.io maps the IP to a hostname, so Caddy can get a free Let's Encrypt certificate; no domain needed).
+
+The public instance runs `dashboard/server.py --public` on port 8766: it shows the market, chart, book, funding and the strategy runner, has no controls and no manual paper account, answers every POST with 403, and polls every 10–15 s (pausing in background tabs) to stay within the free tier's outbound data. The private dashboard on 8765 is never proxied; keep using the SSH tunnel for it. If the VM's external IP changes (ephemeral IPs can change on stop/start), re-run the script to get the new URL and certificate.
+
 ## Things to know
 
 - **Oracle idle reclamation.** Oracle may reclaim Always Free instances that stay mostly idle for a week, and this bot uses very little CPU. Upgrading the account to Pay As You Go (Always Free resources stay free) is Oracle's documented way to avoid that. Check the current policy when you sign up.

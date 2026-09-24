@@ -2,6 +2,8 @@
 
 [![tests](https://github.com/AnanmayS/kalshi-perps/actions/workflows/tests.yml/badge.svg)](https://github.com/AnanmayS/kalshi-perps/actions/workflows/tests.yml)
 
+**Live dashboard (read-only): <https://34-75-82-205.sslip.io>**, the funding-carry strategy paper trading 24/7 on a free Google Cloud VM.
+
 A Python trading system for Kalshi's **Bitcoin perpetual futures**: a signed REST and WebSocket client, a market-data pipeline, a backtester that refuses to invent fills, a risk engine with a kill switch, a live paper-trading runner, and a local dashboard. It is demo-first and paper-only by default.
 
 ![Dashboard: live quotes, 24h chart, order book, funding countdown, paper order ticket, strategy runner](docs/img/dashboard.png)
