@@ -192,6 +192,31 @@
     </div>
   </section>
 
+  <section class="card history-card" id="historyCard" hidden>
+    <div class="card-head"><h2>Strategy runner: trade history</h2><span class="muted small" id="histMeta"></span></div>
+    <div class="history-grid">
+      <div>
+        <h3>Trades</h3>
+        <div class="table-wrap">
+          <table class="fills">
+            <thead><tr><th>Time</th><th>Side</th><th class="r">Contracts</th><th class="r">Avg price</th><th class="r">Notional</th><th>Liquidity</th><th class="r">Fee</th><th class="r">Realized</th><th class="r">Position after</th></tr></thead>
+            <tbody id="histTrades"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3>Funding payments</h3>
+        <p class="muted small fine">Every 8h (12a / 8a / 4p ET) longs and shorts pay each other: positive rate means longs pay shorts. Amount = rate × position × mark price.</p>
+        <div class="table-wrap">
+          <table class="fills">
+            <thead><tr><th>Funding time</th><th class="r">Rate</th><th class="r">Position</th><th class="r">Mark</th><th class="r">Amount</th></tr></thead>
+            <tbody id="histFunding"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="card fills-card">
     <div class="card-head">
       <h2>Paper fills</h2>

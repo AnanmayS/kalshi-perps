@@ -201,6 +201,12 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 code { font: 12px var(--mono); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 @media (max-width: 760px) { .runner-grid { grid-template-columns: minmax(0, 1fr); } }
 
+/* runner trade history */
+.history-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+.history-grid h3 { margin-bottom: 8px; }
+.history-grid .fine { margin: 0 0 8px; }
+@media (max-width: 1100px) { .history-grid { grid-template-columns: minmax(0, 1fr); } }
+
 /* fills */
 .small-btn { margin-left: 0; }
 .fills-card .card-head .muted { margin-left: auto; }
@@ -219,14 +225,14 @@ footer { padding: 4px 20px 20px; }
 /* wide: chart over three cards, order book down the right */
 @media (min-width: 1101px) {
   .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 320px;
-          grid-template-areas: "chart chart chart book" "ticket position funding account" "runner runner runner runner" "fills fills fills fills";
+          grid-template-areas: "chart chart chart book" "ticket position funding account" "runner runner runner runner" "history history history history" "fills fills fills fills";
           align-items: start; }
   .chart-card { grid-area: chart; align-self: stretch; display: flex; flex-direction: column; }
   .chart-card .chart-wrap { flex: 1; min-height: 380px; height: auto; }
   .book-card { grid-area: book; align-self: stretch; }
   .ticket-card { grid-area: ticket; } .position-card { grid-area: position; }
   .funding-card { grid-area: funding; } .account-card { grid-area: account; } .fills-card { grid-area: fills; }
-  .runner-card { grid-area: runner; }
+  .runner-card { grid-area: runner; } .history-card { grid-area: history; }
 }
 @media (max-width: 1100px) {
   .quotes { grid-template-columns: repeat(4, 1fr); }
@@ -248,5 +254,5 @@ body.public .ticket-card, body.public .position-card, body.public .fills-card { 
 .repo-link { text-decoration: none; color: var(--text); }
 .repo-link:hover { border-color: var(--muted); }
 @media (min-width: 1101px) {
-  body.public .grid { grid-template-areas: "chart chart chart book" "runner runner runner book" "funding funding account account"; }
+  body.public .grid { grid-template-areas: "chart chart chart book" "runner runner runner book" "history history history history" "funding funding account account"; }
 }

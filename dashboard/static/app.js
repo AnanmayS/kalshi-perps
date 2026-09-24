@@ -522,10 +522,39 @@ async function refreshRunner() {
   $("runLevSub").textContent = `${money(Math.abs(num(pos.notional)))} notional`;
   setText("runKill", st.risk.killed ? "ON: " + st.risk.kill_reason : `armed · today ${money(st.risk.daily_pnl, true)}`,
     st.risk.killed ? "down" : "");
+  renderHistory(st);
   const log = $("runLog");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 20;
   log.textContent = (r.log || []).join("\n");
   if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function renderHistory(st) {
+  $("historyCard").hidden = false;
+  const when = (iso) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const fills = st.fills || [];
+  $("histTrades").innerHTML = fills.length ? fills.map((f) => {
+    const pa = num(f.position_after), rp = num(f.realized_pnl);
+    const cxl = num(f.cancelled) > 0 ? ` <span class="muted">(${fmtSize(f.cancelled)} cxl)</span>` : "";
+    return `<tr><td>${when(f.ts)}</td><td class="${f.side === "buy" ? "up" : "down"}">${f.side === "buy" ? "Buy" : "Sell"}</td>` +
+      `<td class="r">${fmtSize(f.filled)}${cxl}</td><td class="r">${fmtPx(f.vwap)}</td><td class="r">${money(f.notional)}</td>` +
+      `<td><span class="tag taker">TAKER</span> ${pct(num(f.fee_rate), 2)}</td><td class="r">$${num(f.fee).toFixed(4)}</td>` +
+      `<td class="r ${signCls(rp)}">${rp === 0 ? "—" : money(rp, true)}</td>` +
+      `<td class="r">${pa === 0 ? "Flat" : (pa > 0 ? "Long " : "Short ") + fmtSize(Math.abs(pa))}</td></tr>`;
+  }).join("") : `<tr><td colspan="9" class="muted empty">No trades yet.</td></tr>`;
+
+  const fund = (st.events || []).filter((e) => e.kind === "funding");
+  $("histFunding").innerHTML = fund.length ? fund.map((e) => {
+    const paid = num(e.paid), q = num(e.qty);
+    return `<tr><td>${when(e.funding_time)}</td><td class="r">${pct(num(e.rate), 4)}</td>` +
+      `<td class="r">${q > 0 ? "Long " : "Short "}${fmtSize(Math.abs(q))}</td><td class="r">${fmtPx(e.mark)}</td>` +
+      `<td class="r ${paid < 0 ? "up" : "down"}">${paid < 0 ? "+" : "−"}$${Math.abs(paid).toFixed(2)} ${paid < 0 ? "received" : "paid"}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="muted empty">No funding settled yet.</td></tr>`;
+
+  const recv = fund.reduce((a, e) => a - num(e.paid), 0);
+  const fees = fills.reduce((a, f) => a + num(f.fee), 0);
+  $("histMeta").textContent = `${fills.length} trade${fills.length === 1 ? "" : "s"} · fees $${fees.toFixed(2)} · ` +
+    `${fund.length} funding payment${fund.length === 1 ? "" : "s"} · net funding ${recv >= 0 ? "+" : "−"}$${Math.abs(recv).toFixed(2)}`;
 }
 
 /* ---------------- chart ---------------- */

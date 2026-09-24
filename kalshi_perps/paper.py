@@ -282,8 +282,8 @@ class PaperBroker:
             "taker_fee_rate": self.taker_fee_rate,
             "max_leverage": self.max_leverage,
             "risk": self.risk.snapshot(),
-            "fills": self.fills[-50:][::-1],
-            "events": self.events[-50:][::-1],
+            "fills": self.fills[-200:][::-1],
+            "events": self.events[-200:][::-1],
         }
 
     def to_dict(self) -> dict:
