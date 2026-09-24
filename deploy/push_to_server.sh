@@ -4,8 +4,8 @@
 #
 #   deploy/push_to_server.sh <server-ip>
 set -euo pipefail
-IP=${1:?usage: deploy/push_to_server.sh <server-public-ip>}
-HOST="ubuntu@$IP"
+IP=${1:?usage: deploy/push_to_server.sh <server-ip> [user]}
+HOST="${2:-ubuntu}@$IP"
 cd "$(dirname "$0")/.."
 KEY_PATH=$(grep '^KALSHI_PRIVATE_KEY_PATH=' .env | cut -d= -f2- | sed "s|^~|$HOME|")
 

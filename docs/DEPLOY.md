@@ -1,8 +1,8 @@
-# Run it 24/7 on Oracle Cloud's free tier
+# Run it 24/7 on a free cloud server
 
-The paper runner and dashboard run on a small Always Free Oracle server as `systemd` services: they start on boot and restart if they crash. Your Mac can be closed or off.
+The paper runner and dashboard run on a small free-tier Linux server as `systemd` services: they start on boot and restart if they crash. Your Mac can be closed or off.
 
-Oracle's free-tier terms and console layout change from time to time; if a screen looks different, the names below should still be close.
+Two free options are covered: **Oracle Cloud Always Free** (below) and **[Google Cloud's free e2-micro](#google-cloud-free-tier)**. Free-tier terms and console layouts change from time to time; if a screen looks different, the names should still be close.
 
 ## 1. Create the Oracle account (you)
 
@@ -43,7 +43,7 @@ Funding that comes due during the move is settled when the server's runner start
 
 ```bash
 # Dashboard: keep this running, then open http://localhost:8765 on your Mac
-ssh -N -L 8765:localhost:8765 ubuntu@<PUBLIC_IP>
+ssh -N -L 8765:localhost:8765 ubuntu@<PUBLIC_IP>       # Google Cloud: kalshi@<EXTERNAL_IP>
 
 # Live runner log
 ssh ubuntu@<PUBLIC_IP> 'tail -f ~/kalshi-perps/data/runner/runner.log'
@@ -74,8 +74,42 @@ ssh ubuntu@<PUBLIC_IP> 'bash ~/kalshi-perps/deploy/server_setup.sh'   # git pull
 ssh ubuntu@<PUBLIC_IP> 'sudo systemctl disable --now kalshi-runner kalshi-dashboard'
 ```
 
+## Google Cloud free tier
+
+Google's free tier includes one `e2-micro` VM (1 GB RAM, shared CPU) per month in certain US regions, plus 30 GB of standard disk. It's small but enough; the setup script adds a 1 GB swap file for headroom.
+
+1. **Account.** Sign up at <https://console.cloud.google.com/> (card required for verification). Create a project, then open **Compute Engine** and click **Enable** for the API.
+2. **Create the VM.** **Compute Engine → VM instances → Create instance**:
+
+   | Setting | Value |
+   | --- | --- |
+   | Name | `kalshi-perps` |
+   | Region | **`us-central1` (Iowa), `us-west1` (Oregon) or `us-east1` (South Carolina)**; the free tier only covers these |
+   | Machine | Series **E2**, type **`e2-micro`** |
+   | Boot disk | **Ubuntu 24.04 LTS** (x86/64), disk type **Standard persistent disk**, 30 GB (the "balanced" default isn't free) |
+   | Firewall | leave HTTP/HTTPS unchecked |
+   | SSH key | **Security → Manage access → Add item**, paste your public key ending in ` kalshi` (see below). Google creates a user named `kalshi`. |
+
+   The public key line must end with the username. On your Mac:
+
+   ```bash
+   echo "$(cut -d' ' -f1,2 ~/.ssh/id_ed25519.pub) kalshi" | pbcopy
+   ```
+
+3. **Create**, wait for the green check, and copy the **External IP**.
+4. **Move the bot** (note the user argument):
+
+   ```bash
+   deploy/push_to_server.sh <EXTERNAL_IP> kalshi
+   ```
+
+5. **Watch it** as in step 4 above, with `kalshi@<EXTERNAL_IP>` instead of `ubuntu@<PUBLIC_IP>`.
+
+The external IP is ephemeral by default: it can change if you stop and start the VM. Reserving a static IP is free only while it's attached to a running VM.
+
 ## Things to know
 
-- **Idle reclamation.** Oracle may reclaim Always Free instances that stay mostly idle for a week, and this bot uses very little CPU. Upgrading the account to Pay As You Go (Always Free resources stay free) is Oracle's documented way to avoid that. Check the current policy when you sign up.
+- **Oracle idle reclamation.** Oracle may reclaim Always Free instances that stay mostly idle for a week, and this bot uses very little CPU. Upgrading the account to Pay As You Go (Always Free resources stay free) is Oracle's documented way to avoid that. Check the current policy when you sign up.
+- **Google billing.** New accounts get a free trial credit; the e2-micro stays free after it ends as long as it's in one of the three regions above with a standard disk. Setting a budget alert in Billing is a cheap safety net.
 - **Security.** The dashboard binds to `127.0.0.1` only: it has no login and can place paper orders, so never open port 8765 in Oracle's firewall. Use a demo key on the server, never a production key.
 - **Nothing here sends orders to Kalshi.** The runner is paper-only regardless of `.env`.
