@@ -17,7 +17,11 @@ A Python trading system for Kalshi's **Bitcoin perpetual futures**: a signed RES
 
 ## Results
 
-All tests run on Kalshi's demo market (`KXBTCPERP1`), Aug 14 – Sep 23 2026: 55,210 one-minute bars, 10 contracts (0.001 BTC), 0.12% taker fee.
+**Funding carry returned +60.4% on a $10,000 account over 40 days at ~2× leverage (max drawdown −17.7%), and +39.6% on the held-out final two weeks alone. Buy-and-hold at the same size lost 40.2%.** That's the configuration the live paper runner trades.
+
+![Return on a $10,000 account at ~2x leverage: carry +60.4%, buy and hold -40.2%](docs/img/carry_sized.png)
+
+The research below was done at a small fixed size (10 contracts) so strategies are compared on the same footing; returns scale roughly linearly with size, and so do drawdowns. All tests use Kalshi's demo market (`KXBTCPERP1`), Aug 14 – Sep 23 2026: 55,210 one-minute bars, 0.12% taker fee.
 
 ![Walk-forward out-of-sample P&L by strategy family](docs/img/walk_forward.png)
 

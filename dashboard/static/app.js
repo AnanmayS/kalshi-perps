@@ -507,7 +507,19 @@ async function refreshRunner() {
   const fp = num(pos.funding_paid);
   $("runCosts").textContent = `$${num(pos.fees_paid).toFixed(4)} · ${fp > 0 ? "paid" : fp < 0 ? "recv" : ""} $${Math.abs(fp).toFixed(4)}`;
   const eq = num(st.equity), start = num(st.starting_cash);
+  const pctTxt = (x) => `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x * 100).toFixed(2)}%`;
   $("runEq").innerHTML = `${money(eq)} <span class="${signCls(eq - start)}">(${money(eq - start, true)})</span>`;
+  const tot = (eq - start) / start;
+  setText("runRet", pctTxt(tot), signCls(tot));
+  const started = r.started_at ? new Date(r.started_at) : null;
+  $("runRetSub").textContent = `${money(eq - start, true)} on ${money(start)}`;
+  const dayStart = num(st.risk.day_start_equity), daily = num(st.risk.daily_pnl);
+  const dayPct = dayStart ? daily / dayStart : 0;
+  setText("runRetDay", pctTxt(dayPct), signCls(dayPct));
+  $("runRetDaySub").textContent = money(daily, true);
+  const lev = eq ? Math.abs(num(pos.notional)) / eq : 0;
+  $("runLev").textContent = lev.toFixed(2) + "×";
+  $("runLevSub").textContent = `${money(Math.abs(num(pos.notional)))} notional`;
   setText("runKill", st.risk.killed ? "ON: " + st.risk.kill_reason : `armed · today ${money(st.risk.daily_pnl, true)}`,
     st.risk.killed ? "down" : "");
   const log = $("runLog");

@@ -65,6 +65,20 @@ The carry parameters (average of last 3 rates, 20 bps threshold) were fixed on t
 
 ![Carry P&L decomposition](img/carry_breakdown.png)
 
+### Sized for the account (~2× leverage)
+
+The research runs use 10 contracts so strategies compete on equal footing. The live paper runner trades carry at 2,400 contracts (~$20k notional on a $10k account, ~2× leverage) with the daily loss limit raised to $2,000 and a $25,000 per-order cap.
+
+![Return at 2x leverage](img/carry_sized.png)
+
+| At 2,400 contracts | Return | Max drawdown |
+| --- | ---: | ---: |
+| Funding carry, full 40 days | **+60.43%** | −17.74% |
+| Funding carry, held-out Sep 9 – 23 | **+39.59%** | −20.13% |
+| Buy & hold, full 40 days | −40.23% | −60.12% (kill switch tripped) |
+
+The kill switch never tripped for carry; its worst day was −$917 (−9%). At this size the backtest overstates fill quality: 2,400 contracts is more than the demo book usually shows near the top, and candles don't carry depth. The live runner handles that by filling only within 25 bps of the mark and retrying the rest.
+
 ## What the numbers say
 
 **Momentum loses because the market mean-reverts.** Every momentum variant lost, in every week, before and after costs. The fast version (15 min / 30 bps) lost $1,126 over 40 days on 2,922 fills.
@@ -81,7 +95,7 @@ The carry parameters (average of last 3 rates, 20 bps threshold) were fixed on t
 - **Demo market.** Demo funding and liquidity aren't production's. Production funding is usually a small fraction of this, so the carry edge may not exist there.
 - **Directional risk.** Carry is net short BTC with no hedge. A strong rally would swamp the funding income.
 - **Depth and liquidation** aren't in the backtest; the live paper runner does walk the full book and has a slippage guard.
-- **Small size.** Results are for 10 contracts (~$85 notional); P&L scales roughly linearly with size, and so do drawdowns.
+- **Leverage.** The research is at 10 contracts (~$85); the sized results are the same trades scaled up, so they carry the same single-position risk at 2× the account. A 10% one-day BTC rally would cost about $2,000 and trip the kill switch.
 
 ## Reproduce
 

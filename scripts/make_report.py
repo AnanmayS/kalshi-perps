@@ -106,6 +106,35 @@ def carry_breakdown(res):
     plt.close(fig)
 
 
+def sized_chart(bars, funding, contracts: int = 2400, split_ts: int = 1788912000):
+    """% return on the $10k account at ~2x leverage: the live paper configuration."""
+    cfg = BacktestConfig(taker_fee_rate=Decimal("0.0012"), risk=RiskConfig(Decimal("25000"), Decimal("2000")))
+    fig, ax = plt.subplots(figsize=(10, 4.4))
+    out = {}
+    for name, strat, color, ls, lw in (("Funding carry", FundingCarry(20, 3, Decimal(contracts)), BLUE, "-", 2.2),
+                                       ("Buy & hold", BuyAndHold(Decimal(contracts)), ORANGE, "--", 1.6)):
+        res = run_backtest(bars, funding, strat, cfg)
+        out[name] = res
+        xs = [datetime.fromtimestamp(t, timezone.utc) for t, _ in res.equity_curve]
+        ys = [float(e / res.starting_cash - 1) * 100 for _, e in res.equity_curve]
+        ax.plot(xs, ys, color=color, linestyle=ls, linewidth=lw, zorder=3)
+        ax.annotate(f"{name}  {ys[-1]:+.1f}%", (xs[-1], ys[-1]), xytext=(8, 0), textcoords="offset points",
+                    va="center", color=INK2, fontsize=9.5)
+    split = datetime.fromtimestamp(split_ts, timezone.utc)
+    ax.axvspan(split, xs[-1], color=MUTED, alpha=0.08, zorder=0, linewidth=0)
+    ax.annotate("held-out test", (split, 1), xycoords=("data", "axes fraction"), xytext=(6, -14),
+                textcoords="offset points", color=MUTED, fontsize=9)
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:+.0f}%" if v else "0%"))
+    ax.xaxis.grid(False)
+    ax.axhline(0, color=BASE, linewidth=1, zorder=1)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    ax.set_title(f"Return on a $10,000 account, {contracts:,} contracts (~2x leverage), 40 days", pad=12)
+    fig.subplots_adjust(right=0.8)
+    fig.savefig(OUT / "carry_sized.png", dpi=160)
+    plt.close(fig)
+    return out
+
+
 def walk_forward_chart(wf_path: Path):
     wf = json.loads(wf_path.read_text())
     names = sorted(wf, key=lambda k: wf[k]["total"])
@@ -139,6 +168,8 @@ def main() -> int:
     cfg = BacktestConfig(taker_fee_rate=Decimal("0.0012"), risk=RiskConfig(s.max_notional_per_trade, s.daily_loss_limit))
     results = strategies_chart(bars, funding, cfg)
     carry_breakdown(results["Funding carry"])
+    for name, r in sized_chart(bars, funding).items():
+        print(f"{name:16} at 2x: {r.total_return:+.2%}, max drawdown {r.max_drawdown[1]:.2%}")
     wf = ROOT / "data" / "wf.json"
     if wf.is_file():
         walk_forward_chart(wf)

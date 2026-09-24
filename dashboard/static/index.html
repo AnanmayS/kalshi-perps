@@ -169,6 +169,12 @@
     </div>
     <div id="runEmpty" class="muted small">Start it with <code>python scripts/paper_run.py</code>. It trades its own paper account (separate from the manual ticket above) and never sends orders to Kalshi.</div>
     <div class="runner-grid" id="runBody" hidden>
+      <div>
+      <div class="ret-row">
+        <div class="ret"><label>Return since start</label><div class="ret-v" id="runRet">—</div><div class="ret-sub" id="runRetSub">—</div></div>
+        <div class="ret"><label>Today (UTC)</label><div class="ret-v small-v" id="runRetDay">—</div><div class="ret-sub" id="runRetDaySub">—</div></div>
+        <div class="ret"><label>Leverage</label><div class="ret-v small-v" id="runLev">—</div><div class="ret-sub" id="runLevSub">—</div></div>
+      </div>
       <dl class="kv">
         <dt>Strategy</dt><dd id="runStrat">—</dd>
         <dt>Signal</dt><dd id="runSignal">—</dd>
@@ -180,6 +186,7 @@
         <dt>Equity</dt><dd id="runEq">—</dd>
         <dt>Kill switch</dt><dd id="runKill">—</dd>
       </dl>
+      </div>
       <pre class="runlog" id="runLog"></pre>
     </div>
   </section>

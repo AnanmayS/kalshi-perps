@@ -124,7 +124,9 @@ class BacktestResult:
             f"Strategy      {self.strategy} {self.params}",
             f"Period        {ts(self.start_ts)} -> {ts(self.end_ts)} UTC ({self.bars} bars)",
             f"Start equity  ${self.starting_cash:,.2f}",
-            f"End equity    ${self.final_equity:,.2f}   net {self.net_pnl:+,.2f} ({self.total_return:+.3%})",
+            f"Return        {self.total_return:+.2%}   ({'-' if self.net_pnl < 0 else '+'}${abs(self.net_pnl):,.2f} "
+            f"on ${self.starting_cash:,.0f})",
+            f"End equity    ${self.final_equity:,.2f}",
             "",
             "P&L attribution",
             f"  price P&L          {self.price_pnl:+,.4f}   (includes {-self.spread_cost:+,.4f} of spread crossed)",
@@ -136,7 +138,7 @@ class BacktestResult:
             f"{len(self.rejected)} rejected",
             f"Turnover      ${sum(t.notional for t in self.trades):,.2f} notional",
             f"Exposure      {self.exposure:.1%} of bars in a position",
-            f"Max drawdown  {dd:,.2f} ({ddp:.3%})",
+            f"Max drawdown  {ddp:.2%} (-${abs(dd):,.2f})",
             f"Sharpe (ann.) {'n/a' if sh is None else f'{sh:.2f}'}",
         ]
         if self.killed_at:
