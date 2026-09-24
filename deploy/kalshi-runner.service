@@ -1,0 +1,18 @@
+[Unit]
+Description=kalshi-perps paper trading runner (paper only, never sends orders)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kalshi-perps
+# Strategy and size: edit here, then `sudo systemctl daemon-reload && sudo systemctl restart kalshi-runner`
+ExecStart=/home/ubuntu/kalshi-perps/.venv/bin/python -u scripts/paper_run.py --strategy carry --size 2400
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/kalshi-perps/data/runner/runner.log
+StandardError=append:/home/ubuntu/kalshi-perps/data/runner/runner.log
+
+[Install]
+WantedBy=multi-user.target

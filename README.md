@@ -93,6 +93,8 @@ python scripts/paper_run.py --strategy carry     # trade a strategy live, on pap
 pytest                                           # offline test suite
 ```
 
+To run it 24/7 on a free Oracle Cloud server, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
 To regenerate the charts: `pip install -r requirements-dev.txt && python scripts/walk_forward.py --json data/wf.json && python scripts/make_report.py`.
 
 ## How it works

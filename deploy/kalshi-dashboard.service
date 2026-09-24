@@ -1,0 +1,18 @@
+[Unit]
+Description=kalshi-perps dashboard (localhost only; view through an SSH tunnel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kalshi-perps
+# Binds 127.0.0.1 only: the dashboard has no login and can place paper orders, so never expose it publicly.
+ExecStart=/home/ubuntu/kalshi-perps/.venv/bin/python -u dashboard/server.py --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/kalshi-perps/data/dashboard.log
+StandardError=append:/home/ubuntu/kalshi-perps/data/dashboard.log
+
+[Install]
+WantedBy=multi-user.target
