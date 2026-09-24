@@ -105,7 +105,7 @@ Google's free tier includes one `e2-micro` VM (1 GB RAM, shared CPU) per month i
 
 5. **Watch it** as in step 4 above, with `kalshi@<EXTERNAL_IP>` instead of `ubuntu@<PUBLIC_IP>`.
 
-The external IP is ephemeral by default: it can change if you stop and start the VM. Reserving a static IP is free only while it's attached to a running VM.
+The external IP is ephemeral by default: it can change if you stop and start the VM (just use the new one). Google's pricing for external IPv4 addresses has changed over time, so check the billing page after the first few days and set a budget alert; a small charge there is the most likely surprise.
 
 ## Things to know
 
