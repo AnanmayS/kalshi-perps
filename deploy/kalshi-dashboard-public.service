@@ -1,0 +1,19 @@
+[Unit]
+Description=kalshi-perps public read-only dashboard (served to the internet via Caddy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kalshi-perps
+# --public: no controls, no manual paper account, every POST returns 403.
+# Still binds 127.0.0.1; only Caddy (HTTPS on 443) talks to it.
+ExecStart=/home/ubuntu/kalshi-perps/.venv/bin/python -u dashboard/server.py --public --host 127.0.0.1 --port 8766
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/kalshi-perps/data/dashboard-public.log
+StandardError=append:/home/ubuntu/kalshi-perps/data/dashboard-public.log
+
+[Install]
+WantedBy=multi-user.target

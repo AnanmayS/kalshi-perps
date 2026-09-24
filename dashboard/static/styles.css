@@ -239,3 +239,14 @@ footer { padding: 4px 20px 20px; }
   .chart-card .chart-meta { display: none; }
   .chart-wrap { height: 280px; }
 }
+
+/* read-only public view (dashboard/server.py --public) */
+.public-only { display: none; }
+body.public .public-only { display: inline-flex; }
+body.public footer .public-only { display: inline; }
+body.public .ticket-card, body.public .position-card, body.public .fills-card { display: none; }
+.repo-link { text-decoration: none; color: var(--text); }
+.repo-link:hover { border-color: var(--muted); }
+@media (min-width: 1101px) {
+  body.public .grid { grid-template-areas: "chart chart chart book" "runner runner runner book" "funding funding account account"; }
+}

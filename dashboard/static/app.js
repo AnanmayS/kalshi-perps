@@ -110,7 +110,7 @@ async function loadConfig() {
 function renderStatus() {
   const b = $("statusBadge");
   const label = b.querySelector("span");
-  const stale = Date.now() - state.snapAt > 6000;
+  const stale = Date.now() - state.snapAt > (state.cfg && state.cfg.public ? 25000 : 6000);
   b.classList.remove("ok", "bad");
   if (state.error && stale) {
     b.classList.add("bad");
@@ -768,11 +768,15 @@ function bindControls() {
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", drawChart);
 }
 
+// Poll only while the tab is visible (saves bandwidth, especially on the public view).
+function every(ms, fn) {
+  setInterval(() => { if (!document.hidden) fn(); }, ms);
+}
+
 async function main() {
   chart.canvas = $("chart");
   chart.ctx = chart.canvas.getContext("2d");
   bindControls();
-  bindPaper();
   try {
     await loadConfig();
     $("feeSource").textContent = `Taker rate ${pct(num(state.cfg.taker_fee_rate), 2)} from ${state.cfg.fee_source}.`;
@@ -780,17 +784,32 @@ async function main() {
     state.error = e.message;
     renderStatus();
   }
+  const pub = !!(state.cfg && state.cfg.public);
+  document.body.classList.toggle("public", pub);
+  if (pub && state.cfg.repo_url) $("repoLink").href = state.cfg.repo_url;
   await Promise.all([refreshSnapshot(), refreshCandles()]);
   refreshAccount();
-  refreshPaper();
-  schedulePreview(0);
-  setInterval(refreshSnapshot, 1000);
-  setInterval(refreshPaper, 2000);
   refreshRunner();
-  setInterval(refreshRunner, 3000);
-  setInterval(() => schedulePreview(0), 3000);
-  setInterval(refreshCandles, 30000);
-  setInterval(refreshAccount, 10000);
+  if (pub) {
+    // Read-only view: no manual paper account, and gentler polling.
+    every(10000, refreshSnapshot);
+    every(15000, refreshRunner);
+    every(300000, refreshCandles);
+    every(60000, refreshAccount);
+  } else {
+    bindPaper();
+    refreshPaper();
+    schedulePreview(0);
+    every(1000, refreshSnapshot);
+    every(2000, refreshPaper);
+    every(3000, refreshRunner);
+    every(3000, () => schedulePreview(0));
+    every(30000, refreshCandles);
+    every(10000, refreshAccount);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { refreshSnapshot(); refreshRunner(); }
+  });
   setInterval(() => { tickCountdown(); renderStatus(); }, 250);
 }
 

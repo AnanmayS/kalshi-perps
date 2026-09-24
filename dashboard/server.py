@@ -60,20 +60,29 @@ def _jsonable(o):
     raise TypeError(type(o).__name__)
 
 
+REPO_URL = "https://github.com/AnanmayS/kalshi-perps"
+
+
 class Dashboard:
-    def __init__(self):
+    def __init__(self, public: bool = False):
+        # public=True is the read-only internet-facing view: no manual paper account,
+        # no POST endpoints, slower caches. The private instance keeps full control.
+        self.public = public
         self.settings = load_settings()
         self.client = KalshiPerpsClient(self.settings)
         self.cache = TTLCache()
         self.lock = threading.RLock()
         self.fee_rate, self.fee_source = self._taker_fee_rate()
+        self.last_funding_check = 0.0
+        self.broker = None
+        if public:
+            return
         self.broker = PaperBroker.open(
             PAPER_STATE,
             RiskConfig(self.settings.max_notional_per_trade, self.settings.daily_loss_limit),
             taker_fee_rate=self.fee_rate,
         )
         self.broker.taker_fee_rate = self.fee_rate  # always use the current rate, not a persisted one
-        self.last_funding_check = 0.0
 
     def _taker_fee_rate(self) -> tuple[Decimal, str]:
         if self.settings.has_credentials:
@@ -89,7 +98,8 @@ class Dashboard:
         s = self.settings
         return {"env": s.env, "ticker": s.ticker, "live_trading_enabled": s.live_trading_enabled,
                 "has_credentials": s.has_credentials, "contract_btc": str(Decimal(1) / CONTRACT_BTC),
-                "taker_fee_rate": self.fee_rate, "fee_source": self.fee_source}
+                "taker_fee_rate": self.fee_rate, "fee_source": self.fee_source,
+                "public": self.public, "repo_url": REPO_URL}
 
     def snapshot(self) -> dict:
         def build():
@@ -108,8 +118,9 @@ class Dashboard:
                 "book": {"bids": ob.bids, "asks": ob.asks, "mid": ob.mid, "spread": ob.spread},
                 "funding": fund,
             }
-        snap = self.cache.get("snapshot", 1.0, build)
-        self._paper_tick(snap)
+        snap = self.cache.get("snapshot", 5.0 if self.public else 1.0, build)
+        if self.broker is not None:
+            self._paper_tick(snap)
         return snap
 
     # ---- paper trading ------------------------------------------------------
@@ -262,6 +273,9 @@ def make_handler(app: Dashboard):
     post_routes = {"/api/paper/preview": app.paper_preview, "/api/paper/order": app.paper_order,
                    "/api/paper/close": app.paper_close, "/api/paper/kill": app.paper_kill,
                    "/api/paper/reset_kill": app.paper_reset_kill, "/api/paper/reset": app.paper_reset_account}
+    if app.public:
+        routes.pop("/api/paper/state")
+        post_routes = {}  # read-only: nothing on the public site can change state
     content_types = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
                      ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 
@@ -295,6 +309,9 @@ def make_handler(app: Dashboard):
 
         def do_POST(self):
             path = urlparse(self.path).path
+            if app.public:
+                self._send(403, b'{"error": "read-only public dashboard"}', "application/json")
+                return
             if path not in post_routes:
                 self._send(404, b"not found", "text/plain")
                 return
@@ -327,8 +344,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--public", action="store_true",
+                    help="read-only mode for exposing behind a reverse proxy: no controls, no manual paper account")
     args = ap.parse_args()
-    app = Dashboard()
+    app = Dashboard(public=args.public)
     srv = ThreadingHTTPServer((args.host, args.port), make_handler(app))
     s = app.settings
     print(f"Dashboard: http://localhost:{args.port}  (env={s.env}, ticker={s.ticker}, "

@@ -47,6 +47,9 @@ done
 sudo systemctl daemon-reload
 sudo systemctl enable --now kalshi-runner kalshi-dashboard
 sudo systemctl restart kalshi-runner kalshi-dashboard
+if [ -f /etc/systemd/system/kalshi-dashboard-public.service ]; then
+  sudo systemctl restart kalshi-dashboard-public   # pick up new code on the public view too
+fi
 sleep 5
 systemctl --no-pager --lines=0 status kalshi-runner kalshi-dashboard | grep -E "●|Active:"
 echo "== runner log"
