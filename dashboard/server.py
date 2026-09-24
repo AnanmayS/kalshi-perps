@@ -107,8 +107,9 @@ class Dashboard:
             c = self.client
             m = c.market()
             ob = c.orderbook(depth=15)
-            fund = c.funding_estimate()
-            status = c.exchange_status()
+            # These change slowly; cache them separately so the fast path is just market + book.
+            fund = self.cache.get("funding_estimate", 15.0, c.funding_estimate)
+            status = self.cache.get("exchange_status", 15.0, c.exchange_status)
             return {
                 "server_ts_ms": int(time.time() * 1000),
                 "status": status,
@@ -119,7 +120,7 @@ class Dashboard:
                 "book": {"bids": ob.bids, "asks": ob.asks, "mid": ob.mid, "spread": ob.spread},
                 "funding": fund,
             }
-        snap = self.cache.get("snapshot", 5.0 if self.public else 1.0, build)
+        snap = self.cache.get("snapshot", 1.0, build)  # at most one Kalshi fetch/s however many viewers
         if self.broker is not None:
             self._paper_tick(snap)
         return snap

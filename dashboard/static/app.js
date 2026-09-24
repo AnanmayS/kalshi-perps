@@ -110,7 +110,7 @@ async function loadConfig() {
 function renderStatus() {
   const b = $("statusBadge");
   const label = b.querySelector("span");
-  const stale = Date.now() - state.snapAt > (state.cfg && state.cfg.public ? 25000 : 6000);
+  const stale = Date.now() - state.snapAt > 8000;
   b.classList.remove("ok", "bad");
   if (state.error && stale) {
     b.classList.add("bad");
@@ -140,6 +140,7 @@ function renderQuotes() {
 
   const lastEl = $("qLast");
   lastEl.textContent = fmtPx(last);
+  document.title = `${fmtPx(last)} · ${m.ticker} · BTC Perps Desk`;
   if (state.lastPrice !== null && last !== state.lastPrice) {
     const cls = last > state.lastPrice ? "flash-up" : "flash-down";
     lastEl.classList.remove("flash-up", "flash-down");
@@ -940,7 +941,7 @@ async function main() {
   every(60000, refreshPnl);
   if (pub) {
     // Read-only view: no manual paper account, and gentler polling.
-    every(10000, refreshSnapshot);
+    every(2000, refreshSnapshot);   // ~600 bytes gzipped per update
     every(15000, refreshRunner);
     every(300000, refreshCandles);
     every(60000, refreshAccount);
