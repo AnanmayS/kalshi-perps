@@ -207,32 +207,57 @@ class PaperBroker:
 
     # -- funding -----------------------------------------------------------------
 
-    def apply_funding(self, funding_time: str, rate: Decimal, mark: Decimal, now: datetime | None = None) -> Decimal | None:
-        """Settle one funding event (idempotent per funding_time). Returns amount paid (neg = received)."""
+    def position_at(self, ts: float) -> Decimal:
+        """Signed position held at unix time `ts`, reconstructed from the fill history."""
+        if not self.fills:
+            return self.position.qty
+        qty = ZERO  # every paper account starts flat
+        for f in self.fills:
+            if datetime.fromisoformat(f["ts"]).timestamp() > ts:
+                break
+            qty = Decimal(str(f["position_after"]))
+        return qty
+
+    def apply_funding(self, funding_time: str, rate: Decimal, mark: Decimal, now: datetime | None = None,
+                      qty: Decimal | None = None) -> Decimal | None:
+        """Settle one funding event (idempotent per funding_time). Returns amount paid (neg = received).
+
+        `qty` is the position held at the funding time (defaults to the current one).
+        Positive rate: longs pay shorts, payment = rate x qty x mark.
+        """
         if funding_time in self.funding_applied:
             return None
         self.funding_applied.add(funding_time)
-        pay = self.position.funding_payment(Decimal(rate), Decimal(mark))
-        if self.position.qty != 0:
+        qty = self.position.qty if qty is None else Decimal(qty)
+        pay = Decimal(rate) * qty * Decimal(mark)
+        if qty != 0:
             self.cash -= pay
             self.position.funding_paid += pay
             self._event("funding", now or _now(), funding_time=funding_time, rate=Decimal(rate),
-                        mark=Decimal(mark), qty=self.position.qty, paid=pay)
+                        mark=Decimal(mark), qty=qty, paid=pay)
             self.mark_to_market(Decimal(mark), now)
         self._save()
         return pay
 
     def settle_funding(self, events: list[dict], until_ts: float, parse_ts) -> list[Decimal]:
-        """Settle API funding events in (funding_checked_until, until_ts] and advance the checkpoint."""
+        """Settle API funding events newer than the checkpoint, on the position held at each event.
+
+        Kalshi publishes a funding event a few minutes AFTER its funding_time, so the
+        checkpoint only advances to the newest event actually seen, never to "now";
+        otherwise an event published late would fall behind the checkpoint and be skipped.
+        """
         since = self.funding_checked_until
+        newest = since
         paid = []
         for ev in sorted(events, key=lambda e: e["funding_time"]):
             t = parse_ts(ev["funding_time"]).timestamp()
             if since < t <= until_ts:
-                r = self.apply_funding(ev["funding_time"], Decimal(str(ev["funding_rate"])), Decimal(ev["mark_price"]))
+                r = self.apply_funding(ev["funding_time"], Decimal(str(ev["funding_rate"])),
+                                       Decimal(ev["mark_price"]), qty=self.position_at(t))
                 if r is not None:
                     paid.append(r)
-        self.funding_checked_until = until_ts
+                newest = max(newest, t)
+        self.funding_checked_until = newest
         self._save()
         return paid
 

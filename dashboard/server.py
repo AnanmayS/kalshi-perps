@@ -130,9 +130,10 @@ class Dashboard:
         if time.time() - self.last_funding_check < 30:
             return
         self.last_funding_check = time.time()
-        since, now = int(self.broker.funding_checked_until), int(time.time())
+        now = int(time.time())
+        since = int(min(self.broker.funding_checked_until, now - 2 * 86400))  # events publish late; look back
         try:
-            events = self.client.funding_rates_history(start_ts=since - 60, end_ts=now)
+            events = self.client.funding_rates_history(start_ts=since, end_ts=now)
         except Exception:
             return
         with self.lock:

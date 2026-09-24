@@ -83,7 +83,7 @@ class PaperRunner:
         self.bars_seen = 0
         self.missing_bars = 0
         self.stale_bars = 0
-        self.funding_seen_until: float = clock()
+        self.funding_seen: set[str] = set()   # funding_time strings already given to the strategy
         self.recent: deque[str] = deque(maxlen=40)
 
     # ---- helpers ------------------------------------------------------------------
@@ -117,7 +117,7 @@ class PaperRunner:
             self.strategy.on_bar(b, self.broker.position.qty)  # signal ignored on purpose
         for t, r in feed[fi:]:
             self.strategy.on_funding(int(t), r)
-        self.funding_seen_until = now
+        self.funding_seen = {e["funding_time"] for e in events}
         if bars:
             self.last_bar_ts, self.last_bar = bars[-1].ts, bars[-1]
         else:
@@ -159,21 +159,23 @@ class PaperRunner:
         self.mark = D(mark) if mark else None
         self._last_mark_at = now
         was_killed = self.broker.risk.killed
-        self.broker.mark_to_market(self.mark)
+        self.broker.mark_to_market(self.mark, datetime.fromtimestamp(now, timezone.utc))
         if self.broker.risk.killed and not was_killed:
             self.log(f"KILL SWITCH: {self.broker.risk.kill_reason}")
             if self.flatten_on_kill and self.broker.position.qty != 0:
                 self._execute(ZERO, "kill switch flatten")
 
     def _settle_funding(self, now: float) -> None:
-        since = int(self.broker.funding_checked_until)
-        events = self.client.funding_rates_history(ticker=self.ticker, start_ts=since - 60, end_ts=int(now))
+        # Look back two days every time: events are published minutes after their funding
+        # time, so a narrow "since last check" window can miss them. Dedup is by funding_time.
+        start = int(min(self.broker.funding_checked_until, now - 2 * 86400))
+        events = self.client.funding_rates_history(ticker=self.ticker, start_ts=start, end_ts=int(now))
         for ev in sorted(events, key=lambda e: e["funding_time"]):
-            t = parse_ts(ev["funding_time"]).timestamp()
-            if self.funding_seen_until < t <= now:
-                self.strategy.on_funding(int(t), Decimal(str(ev["funding_rate"])))
-                self.log(f"funding event {ev['funding_time']}: rate {Decimal(str(ev['funding_rate'])) * 100:.4f}%")
-        self.funding_seen_until = now
+            if ev["funding_time"] in self.funding_seen or parse_ts(ev["funding_time"]).timestamp() > now:
+                continue
+            self.funding_seen.add(ev["funding_time"])
+            self.strategy.on_funding(int(parse_ts(ev["funding_time"]).timestamp()), Decimal(str(ev["funding_rate"])))
+            self.log(f"funding event {ev['funding_time']}: rate {Decimal(str(ev['funding_rate'])) * 100:.4f}%")
         for paid in self.broker.settle_funding(events, int(now), parse_ts):
             if paid:
                 self.log(f"funding settled: {'paid' if paid > 0 else 'received'} ${abs(paid):.4f}")
@@ -256,7 +258,8 @@ class PaperRunner:
 
         try:
             f = self.broker.place(side, abs(delta), book.bids, book.asks, self.mark,
-                                  limit_price=limit, reduce_only=reduces)
+                                  limit_price=limit, reduce_only=reduces,
+                                  now=datetime.fromtimestamp(now, timezone.utc))
         except OrderRejected as e:
             if "no liquidity" in str(e):
                 keep_pending(f"no {side} liquidity within {self.max_slippage * 10_000:.0f} bps of mark {ref} "

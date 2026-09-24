@@ -218,3 +218,26 @@ def test_slippage_guard_gives_up_after_retry_window():
     clock.t = T0 + 64 + 301
     r.step()
     assert r.pending is None and r.broker.position.qty == 0
+
+
+def test_funding_published_late_is_still_settled_on_position_held_then():
+    r, client, clock, _ = make({T0 + 60: -10, T0 + 180: 0})
+    r.warmup()
+    iso = lambda t: datetime.fromtimestamp(t, timezone.utc).isoformat()
+    for k in (1, 2, 3):
+        client.candles[T0 + 60 * k] = candle(T0 + 60 * k, "8.49", "8.51")
+    clock.t = T0 + 64
+    r.step()                                             # short 10 at T0+60
+    clock.t = T0 + 125
+    r.step()                                             # funding due at T0+120: not published yet
+    clock.t = T0 + 184
+    r.step()                                             # strategy goes flat at T0+180
+    assert r.broker.position.qty == 0
+    # Kalshi publishes the T0+120 event only now, after the checkpoint time and after the position closed.
+    client.funding = [{"funding_time": iso(T0 + 120), "funding_rate": 0.001, "mark_price": "8.50"}]
+    clock.t = T0 + 250
+    r.step()
+    assert r.broker.position.funding_paid == D("-0.085")  # short 10 at T0+120 received it
+    clock.t = T0 + 320
+    r.step()
+    assert r.broker.position.funding_paid == D("-0.085")  # and only once
