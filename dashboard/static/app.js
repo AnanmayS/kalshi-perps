@@ -244,6 +244,9 @@ function tickCountdown() {
   const mnt = Math.floor((remaining % 3600000) / 60000);
   const sec = Math.floor((remaining % 60000) / 1000);
   $("countdown").textContent = [h, mnt, sec].map((x) => String(x).padStart(2, "0")).join(":");
+  if (document.body.classList.contains("public")) {
+    $("ovNext").textContent = h ? `in ${h}h ${String(mnt).padStart(2, "0")}m` : `in ${mnt}m ${String(sec).padStart(2, "0")}s`;
+  }
   $("fundBar").style.transform = `scaleX(${((FUNDING_PERIOD_MS - Math.min(remaining, FUNDING_PERIOD_MS)) / FUNDING_PERIOD_MS).toFixed(4)})`;
 }
 
@@ -478,6 +481,8 @@ function bindPaper() {
 async function refreshRunner() {
   let r;
   try { r = await getJSON("/api/runner"); } catch (e) { return; }
+  state.runner = r;
+  renderOverview();
   const badge = $("runBadge");
   const label = badge.querySelector("span");
   badge.classList.remove("ok", "bad");
@@ -538,9 +543,9 @@ function renderHistory(st) {
     const pa = num(f.position_after), rp = num(f.realized_pnl);
     const cxl = num(f.cancelled) > 0 ? ` <span class="muted">(${fmtSize(f.cancelled)} cxl)</span>` : "";
     return `<tr><td>${when(f.ts)}</td><td class="${f.side === "buy" ? "up" : "down"}">${f.side === "buy" ? "Buy" : "Sell"}</td>` +
-      `<td class="r">${fmtSize(f.filled)}${cxl}</td><td class="r">${fmtPx(f.vwap)}</td><td class="r">${money(f.notional)}</td>` +
-      `<td><span class="tag taker">TAKER</span> ${pct(num(f.fee_rate), 2)}</td><td class="r">$${num(f.fee).toFixed(4)}</td>` +
-      `<td class="r ${signCls(rp)}">${rp === 0 ? "—" : money(rp, true)}</td>` +
+      `<td class="r">${fmtSize(f.filled)}${cxl}</td><td class="r">${fmtPx(f.vwap)}</td><td class="r c-notional">${money(f.notional)}</td>` +
+      `<td class="c-liq"><span class="tag taker">TAKER</span> ${pct(num(f.fee_rate), 2)}</td><td class="r">$${num(f.fee).toFixed(2)}</td>` +
+      `<td class="r c-real ${signCls(rp)}">${rp === 0 ? "—" : money(rp, true)}</td>` +
       `<td class="r">${pa === 0 ? "Flat" : (pa > 0 ? "Long " : "Short ") + fmtSize(Math.abs(pa))}</td></tr>`;
   }).join("") : `<tr><td colspan="9" class="muted empty">No trades yet.</td></tr>`;
 
@@ -548,14 +553,76 @@ function renderHistory(st) {
   $("histFunding").innerHTML = fund.length ? fund.map((e) => {
     const paid = num(e.paid), q = num(e.qty);
     return `<tr><td>${when(e.funding_time)}</td><td class="r">${pct(num(e.rate), 4)}</td>` +
-      `<td class="r">${q > 0 ? "Long " : "Short "}${fmtSize(Math.abs(q))}</td><td class="r">${fmtPx(e.mark)}</td>` +
-      `<td class="r ${paid < 0 ? "up" : "down"}">${paid < 0 ? "+" : "−"}$${Math.abs(paid).toFixed(2)} ${paid < 0 ? "received" : "paid"}</td></tr>`;
+      `<td class="r c-pos">${q > 0 ? "Long " : "Short "}${fmtSize(Math.abs(q))}</td><td class="r c-mark">${fmtPx(e.mark)}</td>` +
+      `<td class="r ${paid < 0 ? "up" : "down"}">${paid < 0 ? "+" : "−"}$${Math.abs(paid).toFixed(2)}</td></tr>`;
   }).join("") : `<tr><td colspan="5" class="muted empty">No funding settled yet.</td></tr>`;
 
   const recv = fund.reduce((a, e) => a - num(e.paid), 0);
   const fees = fills.reduce((a, f) => a + num(f.fee), 0);
   $("histMeta").textContent = `${fills.length} trade${fills.length === 1 ? "" : "s"} · fees $${fees.toFixed(2)} · ` +
     `${fund.length} funding payment${fund.length === 1 ? "" : "s"} · net funding ${recv >= 0 ? "+" : "−"}$${Math.abs(recv).toFixed(2)}`;
+}
+
+/* ---------------- simplified public overview ---------------- */
+
+// Public view: move the trader-level panels into the collapsed "Market details" section.
+function arrangePublic() {
+  const slot = $("detailsSlot");
+  slot.appendChild($("quotes"));
+  const grid = document.createElement("div");
+  grid.className = "details-grid";
+  for (const sel of [".chart-card", ".book-card", ".runner-card", ".funding-card", ".account-card"]) {
+    grid.appendChild(document.querySelector(sel));
+  }
+  slot.appendChild(grid);
+  $("marketDetails").addEventListener("toggle", () => { if ($("marketDetails").open) drawChart(); });
+}
+
+function renderOverview() {
+  if (!document.body.classList.contains("public")) return;
+  const s = state.snap, r = state.runner;
+  if (s) {
+    const last = num(s.market.price);
+    $("ovPrice").textContent = fmtPx(last);
+    if (state.candles.length) {
+      const open24 = num(state.candles[0].o), d = (last - open24) / open24;
+      setText("ovPriceSub", `${d >= 0 ? "+" : "−"}${Math.abs(d * 100).toFixed(2)}% in the last 24 hours`, d >= 0 ? "up" : "down");
+    }
+  }
+  if (!r || !r.exists) {
+    $("ovLede").textContent = "The trading bot isn't reporting right now. Market data below is still live.";
+    return;
+  }
+  const st = r.paper, pos = st.position, q = num(pos.qty);
+  const eq = num(st.equity), start = num(st.starting_cash), ret = (eq - start) / start;
+  const fund = (st.events || []).filter((e) => e.kind === "funding");
+  const recv = -num(pos.funding_paid);
+  const since = st.fills && st.fills.length
+    ? new Date(st.fills[st.fills.length - 1].ts).toLocaleDateString([], { month: "short", day: "numeric" }) : null;
+  const retTxt = `${ret >= 0 ? "up" : "down"} <span class="${ret >= 0 ? "up" : "down"}">${ret >= 0 ? "+" : "−"}${Math.abs(ret * 100).toFixed(2)}%</span>`;
+  const side = q < 0 ? "short (betting Bitcoin falls)" : q > 0 ? "long (betting Bitcoin rises)" : "flat";
+  let lede = `On a $${start.toLocaleString("en-US")} paper account, the bot is ${retTxt} (${money(eq - start, true)})` +
+    (since ? ` since ${since}` : "") + `. It's currently <strong>${side}</strong>`;
+  lede += q === 0 ? ", waiting for funding to get high enough to be worth collecting."
+    : `, and it has collected <strong>${money(recv)}</strong> in funding payments so far.`;
+  if (st.risk && st.risk.killed) lede += " Its daily loss limit was hit, so it's standing aside until tomorrow.";
+  if (!r.running) lede += " (The bot hasn't checked in for a while; numbers may be stale.)";
+  $("ovLede").innerHTML = lede;
+
+  const btc = Math.abs(q) / CONTRACTS_PER_BTC;
+  $("ovPos").textContent = q === 0 ? "No position" : `${q < 0 ? "Short" : "Long"} ${btc.toFixed(2)} BTC`;
+  const lev = eq ? Math.abs(num(pos.notional)) / eq : 0;
+  $("ovPosSub").textContent = q === 0 ? "waiting for a signal" : `${money(Math.abs(num(pos.notional)))} of Bitcoin · ${lev.toFixed(1)}× the account`;
+  setText("ovFund", money(recv, true), recv > 0 ? "up" : recv < 0 ? "down" : "");
+  $("ovFundSub").textContent = `${fund.length} payment${fund.length === 1 ? "" : "s"} · $${num(pos.fees_paid).toFixed(2)} paid in trading fees`;
+
+  const f = s && s.funding;
+  if (f && f.funding_rate != null) {
+    const rate = num(f.funding_rate), mark = num(f.mark_price);
+    const est = -rate * q * mark;  // positive = the bot receives
+    $("ovNextSub").textContent = q === 0 ? `current rate ${pct(rate, 2)} per 8h`
+      : `estimated ${est >= 0 ? "+" : "−"}$${Math.abs(est).toFixed(0)} at the current rate`;
+  }
 }
 
 /* ---------------- runner P&L charts ---------------- */
@@ -881,6 +948,7 @@ async function refreshSnapshot() {
     renderQuotes();
     renderBook();
     renderFundingStatic();
+    renderOverview();
     drawChart();
     $("updated").textContent = "updated " + new Date().toLocaleTimeString();
   } catch (e) {
@@ -929,6 +997,7 @@ function every(ms, fn) {
 async function main() {
   chart.canvas = $("chart");
   chart.ctx = chart.canvas.getContext("2d");
+  if (document.body.classList.contains("public")) arrangePublic();
   bindControls();
   try {
     await loadConfig();
@@ -938,7 +1007,6 @@ async function main() {
     renderStatus();
   }
   const pub = !!(state.cfg && state.cfg.public);
-  document.body.classList.toggle("public", pub);
   if (pub && state.cfg.repo_url) $("repoLink").href = state.cfg.repo_url;
   await Promise.all([refreshSnapshot(), refreshCandles()]);
   refreshAccount();

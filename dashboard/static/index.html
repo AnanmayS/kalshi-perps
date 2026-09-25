@@ -12,8 +12,8 @@
   <div class="brand">
     <span class="logo">₿</span>
     <div>
-      <div class="title"><span id="ticker">—</span> <span class="muted">Perpetual</span></div>
-      <div class="subtitle muted" id="subtitle">Kalshi · 0.0001 BTC / contract · CF Benchmarks BRTI</div>
+      <div class="title"><span class="trader-only"><span id="ticker">—</span> <span class="muted">Perpetual</span></span><span class="public-inline">Bitcoin funding bot</span></div>
+      <div class="subtitle muted" id="subtitle"><span class="trader-only">Kalshi · 0.0001 BTC / contract · CF Benchmarks BRTI</span><span class="public-inline">Paper trading on Kalshi's demo Bitcoin perpetual</span></div>
     </div>
   </div>
   <div class="badges">
@@ -27,6 +27,44 @@
     </div>
   </div>
 </header>
+
+<section class="overview public-block" aria-labelledby="ovTitle">
+  <div class="ov-intro">
+    <h1 id="ovTitle">A bot that gets paid to hold a Bitcoin short</h1>
+    <p class="ov-lede" id="ovLede">Loading the bot's latest numbers…</p>
+  </div>
+  <dl class="ov-facts">
+    <div class="ov-fact">
+      <dt>Bitcoin price <span class="live" aria-hidden="true"></span></dt>
+      <dd class="ov-v" id="ovPrice">—</dd>
+      <dd class="ov-sub" id="ovPriceSub">&nbsp;</dd>
+    </div>
+    <div class="ov-fact">
+      <dt>Bot's position</dt>
+      <dd class="ov-v" id="ovPos">—</dd>
+      <dd class="ov-sub" id="ovPosSub">&nbsp;</dd>
+    </div>
+    <div class="ov-fact">
+      <dt>Funding collected</dt>
+      <dd class="ov-v" id="ovFund">—</dd>
+      <dd class="ov-sub" id="ovFundSub">&nbsp;</dd>
+    </div>
+    <div class="ov-fact">
+      <dt>Next funding payment</dt>
+      <dd class="ov-v" id="ovNext">—</dd>
+      <dd class="ov-sub" id="ovNextSub">&nbsp;</dd>
+    </div>
+  </dl>
+  <div class="ov-how">
+    <h2>How it works</h2>
+    <ul>
+      <li><strong>Funding.</strong> Every 8 hours, traders betting Bitcoin goes up pay traders betting it goes down (or the reverse), whichever side is more crowded.</li>
+      <li><strong>The bet.</strong> When the "up" side has been paying more than 0.20% per 8 hours, the bot takes the "down" side (a short) and collects.</li>
+      <li><strong>The risk.</strong> If Bitcoin rises, the short loses money. A $2,000 daily loss limit closes it automatically.</li>
+    </ul>
+    <p class="ov-note">Paper trading on Kalshi's demo market: live prices, simulated orders, no real money. Chart and trade history below.</p>
+  </div>
+</section>
 
 <section class="quotes" id="quotes">
   <div class="q q-last"><label>Last</label><div class="v big" id="qLast">—</div><div class="sub" id="qChange">—</div></div>
@@ -193,36 +231,36 @@
   </section>
 
   <section class="card history-card" id="historyCard" hidden>
-    <div class="card-head"><h2>Strategy runner: trade history</h2><span class="muted small" id="histMeta"></span></div>
+    <div class="card-head"><h2>Performance and trade history</h2><span class="muted small" id="histMeta"></span></div>
     <div class="pnl-charts">
       <div>
-        <div class="pnl-head"><h3>Return since start</h3><span class="muted small" id="pnlRetNow"></span></div>
+        <div class="pnl-head"><h3>Return since start</h3><span class="muted small trader-only" id="pnlRetNow"></span></div>
         <div class="pnl-wrap"><canvas id="pnlRet" role="img" aria-label="Strategy runner account return in percent over time"></canvas><div class="tip" id="pnlRetTip" hidden></div></div>
       </div>
       <div>
-        <div class="pnl-head"><h3>Where the P&amp;L comes from</h3>
-          <span class="legend small"><i class="sw" style="background:var(--bid)"></i>Funding received <i class="sw dash" style="border-color:var(--accent)"></i>Price move + fees <i class="sw" style="background:var(--text)"></i>Net</span>
+        <div class="pnl-head"><h3>Where the money comes from</h3>
+          <span class="legend small"><i class="sw" style="background:var(--bid)"></i>Funding payments <i class="sw dash" style="border-color:var(--accent)"></i>Bitcoin price moves + fees <i class="sw" style="background:var(--text)"></i>Total</span>
         </div>
         <div class="pnl-wrap"><canvas id="pnlParts" role="img" aria-label="Net P&L in dollars split into funding received and price move plus fees"></canvas><div class="tip" id="pnlPartsTip" hidden></div></div>
       </div>
     </div>
-    <p class="muted small fine" id="pnlNote">Rebuilt from the runner's fills and funding payments, marked at each minute's bid/ask mid.</p>
+    <p class="muted small fine trader-only" id="pnlNote">Rebuilt from the runner's fills and funding payments, marked at each minute's bid/ask mid.</p>
     <div class="history-grid">
       <div>
-        <h3>Trades</h3>
+        <h3>Every trade</h3>
         <div class="table-wrap">
           <table class="fills">
-            <thead><tr><th>Time</th><th>Side</th><th class="r">Contracts</th><th class="r">Avg price</th><th class="r">Notional</th><th>Liquidity</th><th class="r">Fee</th><th class="r">Realized</th><th class="r">Position after</th></tr></thead>
+            <thead><tr><th>Time</th><th>Side</th><th class="r">Contracts</th><th class="r">Avg price</th><th class="r c-notional">Notional</th><th class="c-liq">Liquidity</th><th class="r">Fee</th><th class="r c-real">Realized</th><th class="r">Position after</th></tr></thead>
             <tbody id="histTrades"></tbody>
           </table>
         </div>
       </div>
       <div>
-        <h3>Funding payments</h3>
-        <p class="muted small fine">Every 8h (12a / 8a / 4p ET) longs and shorts pay each other: positive rate means longs pay shorts. Amount = rate × position × mark price.</p>
+        <h3>Every funding payment</h3>
+        <p class="muted small fine trader-only">Every 8h (12a / 8a / 4p ET) longs and shorts pay each other: positive rate means longs pay shorts. Amount = rate × position × mark price.</p>
         <div class="table-wrap">
           <table class="fills">
-            <thead><tr><th>Funding time</th><th class="r">Rate</th><th class="r">Position</th><th class="r">Mark</th><th class="r">Amount</th></tr></thead>
+            <thead><tr><th>Funding time</th><th class="r">Rate</th><th class="r c-pos">Position</th><th class="r c-mark">Mark</th><th class="r">Amount</th></tr></thead>
             <tbody id="histFunding"></tbody>
           </table>
         </div>
@@ -245,6 +283,11 @@
     <div class="events small" id="events"></div>
   </section>
 </main>
+
+<details class="market-details public-block" id="marketDetails">
+  <summary>Market details for traders <span class="muted small">order book, candles, spread, funding estimate, bot internals</span></summary>
+  <div class="details-slot" id="detailsSlot"></div>
+</details>
 
 <footer class="muted small">
   <span id="updated">—</span> · paper trading only, no live orders · data from Kalshi <span id="envFoot"></span> API<span class="public-only"> · read-only public view</span>

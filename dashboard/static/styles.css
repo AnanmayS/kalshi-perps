@@ -267,3 +267,89 @@ body.public .ticket-card, body.public .position-card, body.public .fills-card { 
 @media (min-width: 1101px) {
   body.public .grid { grid-template-areas: "chart chart chart book" "runner runner runner book" "history history history history" "funding funding account account"; }
 }
+
+/* ---------- simplified public view ---------- */
+.public-block { display: none; }
+body.public .public-block { display: block; }
+body.public .seg[aria-label="Price units"] { display: none; }
+
+.overview { padding: 36px 20px 8px; max-width: 1400px; margin: 0 auto; }
+.ov-intro { max-width: 70ch; }
+.overview h1 {
+  margin: 0 0 12px; font-size: clamp(26px, 3.2vw, 38px); line-height: 1.12; font-weight: 650;
+  letter-spacing: -0.02em; text-wrap: balance;
+}
+.ov-lede { margin: 0; font-size: 18px; line-height: 1.55; color: var(--muted); max-width: 64ch; text-wrap: pretty; }
+.ov-lede strong { color: var(--text); font-weight: 600; }
+.ov-lede .up, .ov-lede .down { font-weight: 650; }
+
+.ov-facts {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 32px 0 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.ov-fact { padding: 18px 20px 18px 0; min-width: 0; }
+.ov-fact + .ov-fact { padding-left: 20px; border-left: 1px solid var(--line); }
+.ov-fact dt { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.ov-fact dd { margin: 0; }
+.ov-v { font: 600 26px/1.3 var(--mono); font-variant-numeric: tabular-nums; margin-top: 6px !important; white-space: nowrap; }
+.ov-sub { font-size: 13px; color: var(--muted); margin-top: 2px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live { width: 7px; height: 7px; border-radius: 50%; background: var(--bid); box-shadow: 0 0 0 3px var(--bid-bg); }
+@media (prefers-reduced-motion: no-preference) {
+  .live { animation: pulse 2s ease-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px transparent; } }
+}
+
+.ov-how { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 8px 32px; padding: 28px 0 8px; }
+.ov-how h2 { font-size: 15px; margin: 2px 0 0; }
+.ov-how ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.ov-how li { font-size: 14.5px; line-height: 1.55; color: var(--muted); }
+.ov-how li strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+.ov-note { grid-column: 2; margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+
+body.public .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; max-width: 1400px; margin: 0 auto; }
+body.public .history-card { grid-area: auto; }
+
+.market-details { max-width: 1400px; margin: 0 auto 8px; padding: 0 20px; }
+.market-details > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-weight: 600;
+}
+.market-details > summary::-webkit-details-marker { display: none; }
+.market-details > summary::before { content: "+"; font: 600 16px var(--mono); color: var(--accent); width: 12px; }
+.market-details[open] > summary::before { content: "−"; }
+.market-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.market-details[open] > summary { margin-bottom: 14px; }
+.details-slot .quotes { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+.details-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1101px) {
+  .details-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 320px;
+                  grid-template-areas: "chart chart chart book" "runner runner runner book" "funding funding account account"; }
+}
+::selection { background: rgba(247, 147, 26, 0.35); }
+
+@media (max-width: 900px) {
+  .ov-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-fact:nth-child(3) { padding-left: 0; border-left: 0; }
+  .ov-fact:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .ov-how { grid-template-columns: minmax(0, 1fr); }
+  .ov-how ul { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .ov-note { grid-column: 1; }
+}
+@media (max-width: 560px) {
+  .overview { padding: 24px 16px 4px; }
+  .market-details { padding: 0 16px; }
+  .ov-v { font-size: 21px; }
+  .ov-fact { padding-right: 12px; }
+  .ov-fact + .ov-fact { padding-left: 12px; }
+}
+@media (max-width: 560px) { .ov-fact:nth-child(3) { padding-left: 0; } }
+
+.public-inline { display: none; }
+body.public .public-inline { display: inline; }
+body.public .trader-only { display: none !important; }
+body.public .c-liq, body.public .c-real, body.public .c-notional, body.public .c-mark { display: none; }
+body.public .history-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+@media (max-width: 560px) {
+  .ov-v { font-size: 18px; white-space: normal; }
+  .ov-sub { white-space: normal; }
+}

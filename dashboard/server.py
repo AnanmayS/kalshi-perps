@@ -387,7 +387,11 @@ def make_handler(app: Dashboard):
             if STATIC not in f.parents or not f.is_file():
                 self._send(404, b"not found", "text/plain")
                 return
-            self._send(200, f.read_bytes(), content_types.get(f.suffix, "application/octet-stream"))
+            body = f.read_bytes()
+            if app.public and f.name == "index.html":
+                # Mark the page public before any script runs, so the simplified layout renders first.
+                body = body.replace(b"<body>", b'<body class="public">', 1)
+            self._send(200, body, content_types.get(f.suffix, "application/octet-stream"))
 
     return Handler
 
