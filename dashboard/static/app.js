@@ -550,6 +550,7 @@ function renderHistory(st) {
   }).join("") : `<tr><td colspan="9" class="muted empty">No trades yet.</td></tr>`;
 
   const fund = (st.events || []).filter((e) => e.kind === "funding");
+  renderPositions(st, fills, fund, when);
   $("histFunding").innerHTML = fund.length ? fund.map((e) => {
     const paid = num(e.paid), q = num(e.qty);
     return `<tr><td>${when(e.funding_time)}</td><td class="r">${pct(num(e.rate), 4)}</td>` +
@@ -561,6 +562,60 @@ function renderHistory(st) {
   const fees = fills.reduce((a, f) => a + num(f.fee), 0);
   $("histMeta").textContent = `${fills.length} trade${fills.length === 1 ? "" : "s"} · fees $${fees.toFixed(2)} · ` +
     `${fund.length} funding payment${fund.length === 1 ? "" : "s"} · net funding ${recv >= 0 ? "+" : "−"}$${Math.abs(recv).toFixed(2)}`;
+}
+
+// Group fills into positions: each one runs from flat to flat (a flip closes one and opens the next).
+function buildPositions(fills, fund) {
+  const chron = [...fills].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+  const out = [];
+  let cur = null, qty = 0;
+  const open = (t, side) => ({ opened: t, closed: null, side, maxSize: 0, entryNotional: 0, entryQty: 0,
+                               exitNotional: 0, exitQty: 0, realized: 0, fees: 0, funding: 0 });
+  for (const f of chron) {
+    const signed = (f.side === "buy" ? 1 : -1) * num(f.filled), px = num(f.vwap), fee = num(f.fee);
+    let remaining = signed;
+    if (qty !== 0 && Math.sign(signed) !== Math.sign(qty)) {
+      const closing = Math.min(Math.abs(signed), Math.abs(qty));
+      cur.exitNotional += closing * px; cur.exitQty += closing;
+      cur.realized += num(f.realized_pnl);
+      cur.fees += fee * (closing / Math.abs(signed));
+      qty += Math.sign(signed) * closing;
+      remaining = signed - Math.sign(signed) * closing;
+      if (qty === 0) { cur.closed = f.ts; out.push(cur); cur = null; }
+    }
+    if (remaining !== 0) {
+      if (!cur) cur = open(f.ts, remaining > 0 ? "Long" : "Short");
+      cur.entryNotional += Math.abs(remaining) * px; cur.entryQty += Math.abs(remaining);
+      cur.fees += fee * (Math.abs(remaining) / Math.abs(signed));
+      qty += remaining;
+      cur.maxSize = Math.max(cur.maxSize, Math.abs(qty));
+    }
+  }
+  if (cur) out.push(cur);
+  for (const p of out) {
+    const t0 = new Date(p.opened), t1 = p.closed ? new Date(p.closed) : null;
+    p.funding = fund.filter((e) => { const t = new Date(e.funding_time); return t >= t0 && (!t1 || t <= t1); })
+                    .reduce((a, e) => a - num(e.paid), 0);
+  }
+  return out.reverse();  // newest first
+}
+
+function renderPositions(st, fills, fund, when) {
+  const rows = buildPositions(fills, fund);
+  const pos = st.position;
+  $("histPositions").innerHTML = rows.length ? rows.map((p) => {
+    const isOpen = !p.closed;
+    const entry = p.entryNotional / p.entryQty;
+    const exit = isOpen ? num(st.mark) : p.exitNotional / p.exitQty;
+    const pricePnl = isOpen ? num(pos.unrealized_pnl) + p.realized : p.realized;
+    const net = pricePnl + p.funding - p.fees;
+    return `<tr class="${isOpen ? "open-row" : ""}"><td>${when(p.opened)}</td>` +
+      `<td>${isOpen ? '<span class="pill">open</span>' : when(p.closed)}</td>` +
+      `<td class="${p.side === "Long" ? "up" : "down"}">${p.side}</td><td class="r">${fmtSize(p.maxSize)}</td>` +
+      `<td class="r">${fmtPx(entry)}</td><td class="r">${fmtPx(exit)}</td>` +
+      `<td class="r ${signCls(pricePnl)}">${money(pricePnl, true)}</td><td class="r ${signCls(p.funding)}">${money(p.funding, true)}</td>` +
+      `<td class="r">−$${p.fees.toFixed(2)}</td><td class="r ${signCls(net)}"><strong>${money(net, true)}</strong></td></tr>`;
+  }).join("") : `<tr><td colspan="10" class="muted empty">No positions yet.</td></tr>`;
 }
 
 /* ---------------- simplified public overview ---------------- */
