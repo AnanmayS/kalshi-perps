@@ -147,3 +147,14 @@ def test_sane_mark_rejects_broken_exchange_marks():
     assert sane_mark(wild, book_mid=Decimal("8.455")) == Decimal("8.455")
     assert sane_mark({"price": "8.44"}) == Decimal("8.44")      # last trade as the final fallback
     assert sane_mark({}) is None
+
+
+def test_sane_mark_ignores_sentinel_empty_book_side():
+    from kalshi_perps.client import Orderbook, sane_mark
+    # Observed on demo: ask side empty, reported as int64-max/10^4; its "mid" was ~4.6e14.
+    m = {"price": "8.47", "bid": "8.4719", "ask": "922337203685477.5807",
+         "settlement_mark_price": {"price": "8.4804"}, "liquidation_mark_price": {"price": "8.4792"}}
+    assert sane_mark(m) == Decimal("8.4804")                     # anchored on last trade instead
+    ob = Orderbook(bids=[(Decimal("8.47"), Decimal("5"))], asks=[(Decimal("922337203685477.5807"), Decimal("1"))])
+    assert ob.mid is None
+    assert sane_mark({"bid": "8.47", "ask": "922337203685477.5807"}) is None   # nothing trustworthy

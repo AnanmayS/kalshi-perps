@@ -71,6 +71,9 @@ class PaperRunner:
         self.retry_every = retry_every
         self.retry_for = retry_for
         self.pending: dict | None = None
+        self.max_mark_jump = Decimal("0.10")
+        self._jump_candidate: Decimal | None = None
+        self._jump_count = 0
 
         self.started_at = clock()
         self.last_bar_ts: int | None = None
@@ -158,6 +161,18 @@ class PaperRunner:
         mark = sane_mark(m)
         if mark is None:
             return  # keep the last good mark rather than marking at a broken value
+        if self.mark is not None and abs(mark / self.mark - 1) > self.max_mark_jump:
+            # Bitcoin does not move 10% in a few seconds; treat it as a bad print unless it
+            # holds (within 1%) for about a minute, in which case it's a real move.
+            same = self._jump_candidate is not None and abs(mark / self._jump_candidate - 1) < Decimal("0.01")
+            self._jump_candidate = mark
+            self._jump_count = self._jump_count + 1 if same else 1
+            if self._jump_count < 12:
+                if self._jump_count == 1:
+                    self.log(f"ignoring implausible mark {mark} (last good {self.mark})")
+                return
+            self.log(f"accepting mark {mark}: held for {self._jump_count} checks")
+        self._jump_candidate, self._jump_count = None, 0
         self.mark = mark
         self._last_mark_at = now
         was_killed = self.broker.risk.killed

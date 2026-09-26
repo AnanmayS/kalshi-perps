@@ -34,7 +34,10 @@ class FakeClient:
         return self.book
 
     def market(self, ticker=None):
-        return {"settlement_mark_price": {"price": self.mark, "ts_ms": 0}}
+        # Like the real API: last trade and top of book alongside the mark.
+        bid, ask = self.book.best_bid, self.book.best_ask
+        return {"price": self.mark, "bid": str(bid) if bid else None, "ask": str(ask) if ask else None,
+                "settlement_mark_price": {"price": self.mark, "ts_ms": 0}}
 
     def funding_rates_history(self, ticker=None, start_ts=None, end_ts=None):
         return self.funding
@@ -256,3 +259,21 @@ def test_zero_settlement_mark_does_not_fake_pnl_or_trip_kill_switch():
     assert r.mark == D("8.50")                           # book mid, not the broken 0 mark
     assert r.broker.equity(r.mark) < D("10000")          # no phantom +$85 gain
     assert not r.broker.risk.killed
+
+
+def test_implausible_mark_jump_is_ignored_unless_it_persists():
+    r, client, clock, _ = make({})
+    r.warmup()
+    clock.t = T0 + 10
+    r.step()
+    assert r.mark == D("8.50")
+    client.mark = "12.00"                                 # +41% in 5 seconds: a bad print
+    client.book = Orderbook(bids=[(D("11.99"), D("100"))], asks=[(D("12.01"), D("100"))])
+    for i in range(3):
+        clock.t = T0 + 20 + 5 * i
+        r.step()
+    assert r.mark == D("8.50") and not r.broker.risk.killed
+    for i in range(12):                                   # the new level holds for a minute: accept
+        clock.t = T0 + 40 + 5 * i
+        r.step()
+    assert r.mark == D("12.00")

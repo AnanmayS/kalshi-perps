@@ -46,27 +46,41 @@ def parse_ts(s: str) -> datetime:
 
 
 MARK_MAX_DEVIATION = Decimal("0.05")
+MAX_ANCHOR_SPREAD = Decimal("0.05")
+
+
+def _sane_mid(bid, ask) -> Decimal | None:
+    """Mid of a quote only if both sides are real and the spread is plausible.
+
+    When one side of the demo book is empty Kalshi can report a sentinel (e.g. an ask of
+    int64-max / 10^4), whose "mid" is ~4.6e14; that must never become a price."""
+    bid, ask = D(bid), D(ask)
+    if not bid or not ask or bid <= 0 or ask <= bid:
+        return None
+    if (ask - bid) / bid > MAX_ANCHOR_SPREAD:
+        return None
+    return (bid + ask) / 2
 
 
 def sane_mark(market: dict, book_mid: Decimal | None = None) -> Decimal | None:
     """Best available mark price, rejecting values the exchange sometimes reports broken.
 
-    Kalshi's demo API has returned settlement_mark_price = "0.0000" while trading normally;
-    marking a position at 0 fakes a huge gain (and a huge loss once the mark recovers).
-    Order of preference: settlement mark, liquidation mark, order-book mid, last trade;
-    a mark is used only if it is positive and within 5% of the book mid (or last trade).
+    Observed on Kalshi demo: settlement_mark_price "0.0000" while trading normally, and an
+    empty ask side reported as a huge sentinel. Preference: settlement mark, liquidation mark,
+    then a sane book mid, then the last trade. A mark is used only if it is positive and
+    within 5% of the anchor (sane book mid, else last trade). None if nothing is trustworthy.
     """
     anchor = book_mid if book_mid and book_mid > 0 else None
     if anchor is None:
-        b, a = D(market.get("bid")), D(market.get("ask"))
-        if b and a and 0 < b < a:
-            anchor = (b + a) / 2
+        anchor = _sane_mid(market.get("bid"), market.get("ask"))
+    last = D(market.get("price"))
+    if anchor is None and last and last > 0:
+        anchor = last
     if anchor is None:
-        last = D(market.get("price"))
-        anchor = last if last and last > 0 else None
+        return None
     for key in ("settlement_mark_price", "liquidation_mark_price"):
         v = D((market.get(key) or {}).get("price"))
-        if v and v > 0 and (anchor is None or abs(v / anchor - 1) <= MARK_MAX_DEVIATION):
+        if v and v > 0 and abs(v / anchor - 1) <= MARK_MAX_DEVIATION:
             return v
     return anchor
 
@@ -88,7 +102,7 @@ class Orderbook:
     def mid(self) -> Decimal | None:
         if self.best_bid is None or self.best_ask is None:
             return None
-        return (self.best_bid + self.best_ask) / 2
+        return _sane_mid(self.best_bid, self.best_ask)
 
     @property
     def spread(self) -> Decimal | None:
