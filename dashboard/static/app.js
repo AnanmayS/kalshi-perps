@@ -217,8 +217,13 @@ function renderBook() {
 function renderFundingStatic() {
   const f = state.snap && state.snap.funding;
   if (!f) return;
+  if (!(num(f.mark_price) > 0)) {
+    ["fRate", "fPer", "fAnn"].forEach((id) => ($(id).textContent = "unavailable"));
+    setText("fDir", "Kalshi estimate unavailable", "");
+    return;
+  }
   const rate = num(f.funding_rate);
-  const mark = num(f.mark_price) > 0 ? num(f.mark_price) : num(state.snap.mark);
+  const mark = num(f.mark_price);
   $("fRate").textContent = rate === null ? "—" : pct(rate, 4);
   let dir = "—", cls = "";
   if (rate !== null) {
@@ -672,7 +677,10 @@ function renderOverview() {
   $("ovFundSub").textContent = `${fund.length} payment${fund.length === 1 ? "" : "s"} · $${num(pos.fees_paid).toFixed(2)} paid in trading fees`;
 
   const f = s && s.funding;
-  if (f && f.funding_rate != null) {
+  if (f && !(num(f.mark_price) > 0)) {
+    // Kalshi's estimate comes back as rate 0 / mark 0 when its mark feed is broken.
+    $("ovNextSub").textContent = "Kalshi's estimate is unavailable right now";
+  } else if (f && f.funding_rate != null) {
     const rate = num(f.funding_rate), mark = num(f.mark_price) > 0 ? num(f.mark_price) : num(s.mark);
     const est = -rate * q * mark;  // positive = the bot receives
     $("ovNextSub").textContent = q === 0 ? `current rate ${pct(rate, 2)} per 8h`
