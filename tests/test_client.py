@@ -132,3 +132,18 @@ def test_order_body_when_live(keyfile):
     assert body["count"] == "2" and body["price"] == "8.4500"
     assert body["self_trade_prevention_type"] == "taker_at_cross"
     assert body["client_order_id"]
+
+
+def test_sane_mark_rejects_broken_exchange_marks():
+    from kalshi_perps.client import sane_mark
+    good = {"price": "8.46", "bid": "8.45", "ask": "8.47",
+            "settlement_mark_price": {"price": "8.4620"}, "liquidation_mark_price": {"price": "8.4600"}}
+    assert sane_mark(good) == Decimal("8.4620")
+    # Observed on demo: settlement mark "0.0000" while the market traded normally.
+    zero = {**good, "settlement_mark_price": {"price": "0.0000"}}
+    assert sane_mark(zero) == Decimal("8.4600")
+    wild = {**good, "settlement_mark_price": {"price": "12.00"}, "liquidation_mark_price": {"price": "0"}}
+    assert sane_mark(wild) == Decimal("8.46")                   # falls back to the bid/ask mid
+    assert sane_mark(wild, book_mid=Decimal("8.455")) == Decimal("8.455")
+    assert sane_mark({"price": "8.44"}) == Decimal("8.44")      # last trade as the final fallback
+    assert sane_mark({}) is None

@@ -32,7 +32,7 @@ from typing import Callable
 
 from backtest.data import bar_from_candle
 from kalshi_perps.accounting import ZERO, sign
-from kalshi_perps.client import D, parse_ts
+from kalshi_perps.client import D, parse_ts, sane_mark
 from kalshi_perps.paper import OrderRejected, PaperBroker
 from strategies.base import Bar, Strategy
 
@@ -155,8 +155,10 @@ class PaperRunner:
 
     def _update_mark(self, now: float) -> None:
         m = self.client.market(self.ticker)
-        mark = (m.get("settlement_mark_price") or {}).get("price")
-        self.mark = D(mark) if mark else None
+        mark = sane_mark(m)
+        if mark is None:
+            return  # keep the last good mark rather than marking at a broken value
+        self.mark = mark
         self._last_mark_at = now
         was_killed = self.broker.risk.killed
         self.broker.mark_to_market(self.mark, datetime.fromtimestamp(now, timezone.utc))

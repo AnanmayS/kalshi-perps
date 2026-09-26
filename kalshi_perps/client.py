@@ -45,6 +45,32 @@ def parse_ts(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+MARK_MAX_DEVIATION = Decimal("0.05")
+
+
+def sane_mark(market: dict, book_mid: Decimal | None = None) -> Decimal | None:
+    """Best available mark price, rejecting values the exchange sometimes reports broken.
+
+    Kalshi's demo API has returned settlement_mark_price = "0.0000" while trading normally;
+    marking a position at 0 fakes a huge gain (and a huge loss once the mark recovers).
+    Order of preference: settlement mark, liquidation mark, order-book mid, last trade;
+    a mark is used only if it is positive and within 5% of the book mid (or last trade).
+    """
+    anchor = book_mid if book_mid and book_mid > 0 else None
+    if anchor is None:
+        b, a = D(market.get("bid")), D(market.get("ask"))
+        if b and a and 0 < b < a:
+            anchor = (b + a) / 2
+    if anchor is None:
+        last = D(market.get("price"))
+        anchor = last if last and last > 0 else None
+    for key in ("settlement_mark_price", "liquidation_mark_price"):
+        v = D((market.get(key) or {}).get("price"))
+        if v and v > 0 and (anchor is None or abs(v / anchor - 1) <= MARK_MAX_DEVIATION):
+            return v
+    return anchor
+
+
 @dataclass
 class Orderbook:
     bids: list[tuple[Decimal, Decimal]]  # best (highest) first

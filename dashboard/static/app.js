@@ -167,7 +167,7 @@ function renderQuotes() {
   $("qSpread").textContent = spread === null ? "—" : fmtPxDelta(spread);
   $("qSpreadBps").textContent = spread === null || !mid ? "" : `${((spread / mid) * 1e4).toFixed(1)} bps`;
 
-  const mark = m.settlement_mark_price && m.settlement_mark_price.price;
+  const mark = s.mark;  // server-validated (the raw settlement mark is sometimes 0 on demo)
   const index = m.reference_price && m.reference_price.price;
   $("qMark").textContent = fmtPx(mark);
   $("qIndex").textContent = fmtPx(index);
@@ -218,7 +218,7 @@ function renderFundingStatic() {
   const f = state.snap && state.snap.funding;
   if (!f) return;
   const rate = num(f.funding_rate);
-  const mark = num(f.mark_price);
+  const mark = num(f.mark_price) > 0 ? num(f.mark_price) : num(state.snap.mark);
   $("fRate").textContent = rate === null ? "—" : pct(rate, 4);
   let dir = "—", cls = "";
   if (rate !== null) {
@@ -618,7 +618,7 @@ function renderOverview() {
 
   const f = s && s.funding;
   if (f && f.funding_rate != null) {
-    const rate = num(f.funding_rate), mark = num(f.mark_price);
+    const rate = num(f.funding_rate), mark = num(f.mark_price) > 0 ? num(f.mark_price) : num(s.mark);
     const est = -rate * q * mark;  // positive = the bot receives
     $("ovNextSub").textContent = q === 0 ? `current rate ${pct(rate, 2)} per 8h`
       : `estimated ${est >= 0 ? "+" : "−"}$${Math.abs(est).toFixed(0)} at the current rate`;

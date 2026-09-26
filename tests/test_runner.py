@@ -241,3 +241,18 @@ def test_funding_published_late_is_still_settled_on_position_held_then():
     clock.t = T0 + 320
     r.step()
     assert r.broker.position.funding_paid == D("-0.085")  # and only once
+
+
+def test_zero_settlement_mark_does_not_fake_pnl_or_trip_kill_switch():
+    r, client, clock, _ = make({T0 + 60: -10}, loss_limit="1")
+    r.warmup()
+    client.candles[T0 + 60] = candle(T0 + 60, "8.49", "8.51")
+    clock.t = T0 + 64
+    r.step()                                            # short 10 @ 8.49
+    client.market = lambda ticker=None: {"price": "8.50", "bid": "8.49", "ask": "8.51",
+                                         "settlement_mark_price": {"price": "0.0000"}}
+    clock.t = T0 + 75
+    r.step()
+    assert r.mark == D("8.50")                           # book mid, not the broken 0 mark
+    assert r.broker.equity(r.mark) < D("10000")          # no phantom +$85 gain
+    assert not r.broker.risk.killed

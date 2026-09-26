@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from kalshi_perps import KalshiAPIError, KalshiPerpsClient, load_settings  # noqa: E402
 from kalshi_perps.accounting import DEFAULT_TAKER_FEE_RATE, Position  # noqa: E402
-from kalshi_perps.client import D, parse_ts  # noqa: E402
+from kalshi_perps.client import D, parse_ts, sane_mark  # noqa: E402
 from kalshi_perps.paper import OrderRejected, PaperBroker  # noqa: E402
 from risk import RiskConfig  # noqa: E402
 
@@ -118,6 +118,7 @@ class Dashboard:
                     "open_interest_notional_value_dollars", "volume_24h", "volume_24h_notional_value_dollars",
                     "settlement_mark_price", "liquidation_mark_price", "reference_price", "leverage_estimate")},
                 "book": {"bids": ob.bids, "asks": ob.asks, "mid": ob.mid, "spread": ob.spread},
+                "mark": sane_mark(m, ob.mid),
                 "funding": fund,
             }
         snap = self.cache.get("snapshot", 1.0, build)  # at most one Kalshi fetch/s however many viewers
@@ -129,9 +130,7 @@ class Dashboard:
 
     @staticmethod
     def mark_of(snap: dict) -> Decimal | None:
-        m = snap["market"]
-        mark = (m.get("settlement_mark_price") or {}).get("price")
-        return D(mark) if mark else D(snap["book"]["mid"])
+        return sane_mark(snap["market"], D(snap["book"]["mid"]))
 
     def full_book(self):
         return self.cache.get("full_book", 1.0, lambda: self.client.orderbook())
