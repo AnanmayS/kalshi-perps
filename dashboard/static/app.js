@@ -217,6 +217,9 @@ function renderBook() {
 function renderFundingStatic() {
   const f = state.snap && state.snap.funding;
   if (!f) return;
+  $("nextFunding").textContent = "next funding " + new Date(f.next_funding_time).toLocaleString([], {
+    weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
   if (!(num(f.mark_price) > 0)) {
     ["fRate", "fPer", "fAnn"].forEach((id) => ($(id).textContent = "unavailable"));
     setText("fDir", "Kalshi estimate unavailable", "");
@@ -234,10 +237,6 @@ function renderFundingStatic() {
   setText("fDir", dir, cls);
   $("fPer").textContent = rate === null || mark === null ? "—" : `$${Math.abs(rate * mark).toFixed(4)} / contract`;
   $("fAnn").textContent = rate === null ? "—" : pct(rate * 3 * 365, 1);
-  const next = new Date(f.next_funding_time);
-  $("nextFunding").textContent = "next funding " + next.toLocaleString([], {
-    weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short",
-  });
 }
 
 function tickCountdown() {
